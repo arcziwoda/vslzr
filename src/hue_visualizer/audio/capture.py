@@ -1,12 +1,20 @@
 """Audio capture module — PyAudio wrapper with threaded capture."""
 
 import logging
+import sys
 import threading
 from collections import deque
 from typing import Optional
 
 import numpy as np
-import pyaudio
+
+if sys.platform == "win32":
+    try:
+        import pyaudiowpatch as pyaudio  # WASAPI loopback support on Windows
+    except ImportError:
+        import pyaudio
+else:
+    import pyaudio
 
 from ..core.exceptions import AudioCaptureError
 

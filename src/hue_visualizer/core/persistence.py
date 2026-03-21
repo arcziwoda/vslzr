@@ -1,19 +1,19 @@
 """Persistent configuration storage for bridge credentials.
 
-Stores bridge config in a JSON file in the user's config directory
-(XDG_CONFIG_HOME or ~/.config). Thread-safe read/write operations.
+Stores bridge config in a JSON file in the user's config directory.
+Uses platformdirs for cross-platform paths. Thread-safe read/write operations.
 """
 
 import json
 import logging
-import os
 import threading
 from pathlib import Path
 from typing import Any
 
+from platformdirs import user_config_dir
+
 logger = logging.getLogger(__name__)
 
-# Default config directory follows XDG Base Directory Specification
 _APP_NAME = "hue-visualizer"
 _CONFIG_FILE = "config.json"
 
@@ -21,13 +21,13 @@ _lock = threading.Lock()
 
 
 def _config_dir() -> Path:
-    """Return the config directory path, respecting XDG_CONFIG_HOME."""
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    if xdg:
-        base = Path(xdg)
-    else:
-        base = Path.home() / ".config"
-    return base / _APP_NAME
+    """Return the config directory path (platform-aware via platformdirs).
+
+    macOS:   ~/Library/Application Support/hue-visualizer
+    Windows: C:/Users/<user>/AppData/Roaming/hue-visualizer
+    Linux:   ~/.config/hue-visualizer (XDG)
+    """
+    return Path(user_config_dir(_APP_NAME))
 
 
 def _config_path() -> Path:

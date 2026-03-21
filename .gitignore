@@ -11,3 +11,6 @@ wheels/
 
 # Environment variables (credentials)
 .env
+
+# Override global gitignore — keep PyInstaller spec in repo
+!*.spec

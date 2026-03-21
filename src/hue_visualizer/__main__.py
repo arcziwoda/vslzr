@@ -6,10 +6,15 @@ from dotenv import load_dotenv
 import uvicorn
 
 from hue_visualizer.core.config import Settings
+from hue_visualizer.core.paths import get_env_path
 
 
 def main():
-    load_dotenv()
+    env_path = get_env_path()
+    if env_path:
+        load_dotenv(dotenv_path=env_path)
+    else:
+        load_dotenv()
 
     # Configure logging: route our app logs through a named logger,
     # set root logger to WARNING to suppress hue_entertainment_pykit's

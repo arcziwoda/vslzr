@@ -5,7 +5,6 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -37,7 +36,9 @@ SPECTRUM_BINS = 64
 WS_RATE_HZ = 30
 
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent.parent / "frontend"
+from ..core.paths import get_frontend_dir
+
+FRONTEND_DIR = get_frontend_dir()
 
 
 class ConnectionManager:
