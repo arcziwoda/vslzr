@@ -1369,7 +1369,7 @@ function connect() {
   ws.onopen = function() {
     S.connected = true;
     reconnectDelay = 500;
-    _uiSynced = false;  // Reset so sliders sync on first message (B.10)
+    _sliderSyncBlockUntil = 0;  // Allow immediate slider sync on connect
     $status.classList.add('connected');
     $status.querySelector('.status-text').textContent = 'CONNECTED';
     loadAudioDevices();
@@ -1472,7 +1472,7 @@ function loadAudioDevices() {
 }
 
 // Sync UI controls to server state (B.10)
-var _uiSynced = false;
+var _sliderSyncBlockUntil = 0;  // block slider sync while user is dragging
 
 function syncUIState(d) {
   // Sync on every message for button groups (server may change state),
@@ -1560,9 +1560,8 @@ function syncUIState(d) {
     }
   }
 
-  // Sync sliders only once per connection to avoid overriding user dragging
-  if (!_uiSynced) {
-    _uiSynced = true;
+  // Sync sliders from server state (authoritative), but skip while user is dragging
+  if (Date.now() > _sliderSyncBlockUntil) {
     if (typeof d.bass_boost === 'number') {
       var $bass = document.getElementById('ctrlBassBoost');
       var $bassV = document.getElementById('valBassBoost');
@@ -1576,14 +1575,12 @@ function syncUIState(d) {
       $sat.value = pct;
       $satV.textContent = pct + '%';
     }
-    // Task 2.6: Calibration delay sync
     if (typeof d.calibration_delay === 'number') {
       var $calib = document.getElementById('ctrlCalibDelay');
       var $calibV = document.getElementById('valCalibDelay');
       $calib.value = d.calibration_delay;
       $calibV.textContent = Math.round(d.calibration_delay) + 'ms';
     }
-    // Task 2.8: Brightness min/max sync
     if (typeof d.brightness_min === 'number') {
       var $bMin = document.getElementById('ctrlBrightMin');
       var $bMinV = document.getElementById('valBrightMin');
@@ -1878,6 +1875,7 @@ function initControls() {
   var $bassV = document.getElementById('valBassBoost');
 
   $bass.addEventListener('input', function() {
+    _sliderSyncBlockUntil = Date.now() + 500;
     var v = ($bass.value / 10).toFixed(1);
     $bassV.textContent = v;
     send('set_bass_boost', parseFloat(v));
@@ -1977,6 +1975,7 @@ function initControls() {
   var $sat = document.getElementById('ctrlSaturation');
   var $satV = document.getElementById('valSaturation');
   $sat.addEventListener('input', function() {
+    _sliderSyncBlockUntil = Date.now() + 500;
     var pct = parseInt($sat.value);
     $satV.textContent = pct + '%';
     send('set_saturation', pct / 100);
@@ -1986,6 +1985,7 @@ function initControls() {
   var $brightMin = document.getElementById('ctrlBrightMin');
   var $brightMinV = document.getElementById('valBrightMin');
   $brightMin.addEventListener('input', function() {
+    _sliderSyncBlockUntil = Date.now() + 500;
     var pct = parseInt($brightMin.value);
     $brightMinV.textContent = pct + '%';
     send('set_brightness_min', pct / 100);
@@ -2001,6 +2001,7 @@ function initControls() {
   var $brightMax = document.getElementById('ctrlBrightMax');
   var $brightMaxV = document.getElementById('valBrightMax');
   $brightMax.addEventListener('input', function() {
+    _sliderSyncBlockUntil = Date.now() + 500;
     var pct = parseInt($brightMax.value);
     $brightMaxV.textContent = pct + '%';
     send('set_brightness_max', pct / 100);
@@ -2024,6 +2025,7 @@ function initControls() {
   var $calib = document.getElementById('ctrlCalibDelay');
   var $calibV = document.getElementById('valCalibDelay');
   $calib.addEventListener('input', function() {
+    _sliderSyncBlockUntil = Date.now() + 500;
     var ms = parseInt($calib.value);
     $calibV.textContent = ms + 'ms';
     send('set_calibration_delay', ms);
@@ -2113,6 +2115,8 @@ function _collectCurrentState() {
 
 function _restoreState(state) {
   if (!state) return;
+  // Block server slider sync while restoring — user preset values are authoritative
+  _sliderSyncBlockUntil = Date.now() + 1000;
 
   // Genre
   if (state.genre) {
