@@ -97,7 +97,6 @@ class GenrePreset:
 
     name: str
     # Beat detection
-    beat_threshold: float
     beat_cooldown_ms: float
     bass_boost: float
     # BPM range (octave error protection)
@@ -119,7 +118,6 @@ class GenrePreset:
 PRESETS: dict[str, GenrePreset] = {
     "techno": GenrePreset(
         name="techno",
-        beat_threshold=1.3,
         beat_cooldown_ms=300,
         bass_boost=2.5,
         bpm_min=120.0,
@@ -133,7 +131,6 @@ PRESETS: dict[str, GenrePreset] = {
     ),
     "house": GenrePreset(
         name="house",
-        beat_threshold=1.4,
         beat_cooldown_ms=320,
         bass_boost=2.0,
         bpm_min=115.0,
@@ -147,8 +144,7 @@ PRESETS: dict[str, GenrePreset] = {
     ),
     "dnb": GenrePreset(
         name="dnb",
-        beat_threshold=1.2,
-        beat_cooldown_ms=250,
+        beat_cooldown_ms=300,
         bass_boost=3.0,
         bpm_min=155.0,
         bpm_max=185.0,
@@ -161,7 +157,6 @@ PRESETS: dict[str, GenrePreset] = {
     ),
     "ambient": GenrePreset(
         name="ambient",
-        beat_threshold=1.8,
         beat_cooldown_ms=500,
         bass_boost=1.5,
         bpm_min=60.0,

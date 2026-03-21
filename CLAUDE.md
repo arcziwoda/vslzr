@@ -100,7 +100,7 @@ docs/                          # Research documents
 - **SpatialMapper**: distribution logic lives in `EffectEngine._distribute()`, not in SpatialMapper itself
 - **Hybrid engine**: GenerativeLayer always active (slow hue rotation + breathing), blended with reactive layer — quiet passages ~80% generative, loud ~80% reactive
 - **Predictive beats**: PLL predicts next beat, engine fires early with confidence gating — reduces perceived latency
-- **BeatDetector**: uses mean (not median as research recommends) for adaptive threshold. `_flux_history` populated but never read (dead code)
+- **BeatDetector**: uses median (matching research spec) for adaptive threshold. Beat threshold is fully automatic (adaptive Parallelcube) — no manual sensitivity config
 - **effects.py**: standalone building blocks (Pulse, Breathe, Strobe, FlashDecay, ColorCycle) — NOT integrated with EffectEngine
 - **Genre presets**: `_apply_genre_preset()` updates pipeline + engine atomically, uses `set_base_attack_alpha()` to preserve intensity multiplier
 - **Light send rate**: configurable via `fps_target` (default 50 Hz) — oversampling compensates for UDP packet loss
@@ -115,7 +115,7 @@ docs/                          # Research documents
 
 **Optional (with defaults — audio-only mode works without .env):**
 - Audio: `SAMPLE_RATE=44100`, `BUFFER_SIZE=1024`, `FFT_SIZE=2048`
-- Beat: `BEAT_THRESHOLD_MULTIPLIER=1.4`, `BEAT_COOLDOWN_MS=300`
+- Beat: `BEAT_COOLDOWN_MS=300` (threshold is fully automatic)
 - Smoothing: `ATTACK_ALPHA=0.7`, `RELEASE_ALPHA=0.1`, `BRIGHTNESS_GAMMA=2.2`, `BASS_BOOST_FACTOR=2.0`
 - Safety: `MAX_FLASH_HZ=3.0` (epilepsy limit)
 - Server: `SERVER_HOST=0.0.0.0`, `SERVER_PORT=8080`

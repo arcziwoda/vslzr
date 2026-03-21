@@ -85,11 +85,11 @@ class AudioPipeline:
             sample_rate=settings.sample_rate,
             fft_size=settings.fft_size,
             bass_boost=settings.bass_boost_factor,
+            hop_size=settings.buffer_size,
         )
         self.beat_detector = BeatDetector(
             sample_rate=settings.sample_rate,
             hop_size=settings.buffer_size,
-            threshold_multiplier=settings.beat_threshold_multiplier,
             cooldown_ms=settings.beat_cooldown_ms,
             bpm_min=settings.bpm_min,
             bpm_max=settings.bpm_max,
@@ -1017,7 +1017,6 @@ def _apply_genre_preset(genre: str) -> None:
         return
 
     if pipeline:
-        pipeline.beat_detector.set_threshold(preset.beat_threshold)
         pipeline.beat_detector.set_cooldown(preset.beat_cooldown_ms)
         pipeline.beat_detector.set_bpm_range(preset.bpm_min, preset.bpm_max)
         pipeline.beat_detector.reset()

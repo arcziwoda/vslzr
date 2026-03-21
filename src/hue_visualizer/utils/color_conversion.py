@@ -62,6 +62,23 @@ def rgb_to_xy(r: int, g: int, b: int) -> Tuple[float, float]:
     return (x, y)
 
 
+def _rgb_float_to_xy(r: float, g: float, b: float) -> Tuple[float, float]:
+    """Convert normalized RGB floats (0-1) to CIE XY, bypassing int quantization."""
+    r_gamma = _apply_gamma(r)
+    g_gamma = _apply_gamma(g)
+    b_gamma = _apply_gamma(b)
+
+    X = r_gamma * 0.664511 + g_gamma * 0.154324 + b_gamma * 0.162028
+    Y = r_gamma * 0.283881 + g_gamma * 0.668433 + b_gamma * 0.047685
+    Z = r_gamma * 0.000088 + g_gamma * 0.072310 + b_gamma * 0.986039
+
+    total = X + Y + Z
+    if total == 0:
+        return (0.3127, 0.3290)
+
+    return (X / total, Y / total)
+
+
 def hsv_to_xy(h: float, s: float, v: float) -> Tuple[float, float]:
     """
     Convert HSV to CIE XY color space.
@@ -80,17 +97,12 @@ def hsv_to_xy(h: float, s: float, v: float) -> Tuple[float, float]:
         >>> hsv_to_xy(120, 1.0, 1.0)  # Green
         (0.408, 0.517)
     """
-    # Convert HSV to RGB first
-    h_norm = h / 360.0  # Normalize to 0-1
+    # Convert HSV to RGB (float 0-1)
+    h_norm = h / 360.0
     r, g, b = colorsys.hsv_to_rgb(h_norm, s, v)
 
-    # Convert to 0-255 range
-    r_255 = int(r * 255)
-    g_255 = int(g * 255)
-    b_255 = int(b * 255)
-
-    # Convert RGB to XY
-    return rgb_to_xy(r_255, g_255, b_255)
+    # Use float path directly — avoids int truncation to 0-255
+    return _rgb_float_to_xy(r, g, b)
 
 
 def hsv_to_rgb(h: float, s: float, v: float) -> Tuple[int, int, int]:

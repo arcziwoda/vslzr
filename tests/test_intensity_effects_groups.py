@@ -97,27 +97,23 @@ class TestIntensityConstants:
             assert "flash_tau" in mult
             assert "attack_alpha" in mult
             assert "max_brightness" in mult
-            assert "beat_threshold" in mult
 
     def test_normal_multipliers_are_identity_or_near(self):
         mult = INTENSITY_MULTIPLIERS[INTENSITY_NORMAL]
         assert mult["flash_tau"] == 1.0
         assert mult["attack_alpha"] == 1.0
-        assert mult["beat_threshold"] == 1.0
 
     def test_intense_has_correct_multipliers(self):
         mult = INTENSITY_MULTIPLIERS[INTENSITY_INTENSE]
         assert mult["flash_tau"] == 0.7
         assert mult["attack_alpha"] == 1.3
         assert mult["max_brightness"] == 1.0
-        assert mult["beat_threshold"] == 0.85
 
     def test_chill_has_correct_multipliers(self):
         mult = INTENSITY_MULTIPLIERS[INTENSITY_CHILL]
         assert mult["flash_tau"] == 1.5
         assert mult["attack_alpha"] == 0.6
         assert mult["max_brightness"] == 0.6
-        assert mult["beat_threshold"] == 1.2
 
 
 class TestIntensityDefault:
@@ -167,13 +163,6 @@ class TestIntensitySetLevel:
         engine.set_intensity(INTENSITY_INTENSE)
         engine.set_intensity("nonsense")
         assert engine.intensity_level == INTENSITY_INTENSE  # unchanged
-
-    def test_get_beat_threshold_multiplier(self):
-        engine = EffectEngine(num_lights=6)
-        engine.set_intensity(INTENSITY_INTENSE)
-        assert engine.get_intensity_beat_threshold_multiplier() == 0.85
-        engine.set_intensity(INTENSITY_CHILL)
-        assert engine.get_intensity_beat_threshold_multiplier() == 1.2
 
     def test_attack_alpha_clamped_to_valid_range(self):
         """Even with extreme base values, attack_alpha stays in [0.01, 1.0]."""

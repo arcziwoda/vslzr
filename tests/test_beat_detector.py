@@ -317,7 +317,7 @@ class TestFluxOnsetDetection:
         # Feed a known flux value
         bd.detect(_make_features(bass_energy=0.1, flux=0.5), timestamp=t)
 
-        # Check that flux_history contains log-compressed value
+        # Check that flux_onset_history contains log-compressed value
         expected = float(np.log1p(100.0 * 0.5))  # log(1 + 100 * 0.5) = log(51)
         # After warmup check (bass_history < 10), first 10 frames return early
         # so we need enough frames
@@ -325,8 +325,8 @@ class TestFluxOnsetDetection:
             t += frame_dur
             bd.detect(_make_features(bass_energy=0.1, flux=0.5), timestamp=t)
 
-        assert len(bd._flux_history) > 0
-        last_flux = bd._flux_history[-1]
+        assert len(bd._flux_onset_history) > 0
+        last_flux = bd._flux_onset_history[-1]
         assert abs(last_flux - expected) < 0.01, \
             f"Flux should be log-compressed: expected {expected:.3f}, got {last_flux:.3f}"
 
@@ -406,11 +406,9 @@ class TestFluxOnsetDetection:
             bd.detect(_make_features(bass_energy=0.3, flux=0.5), timestamp=t)
             t += frame_dur
 
-        assert len(bd._flux_history) > 0
         assert len(bd._flux_onset_history) > 0
 
         bd.reset()
-        assert len(bd._flux_history) == 0
         assert len(bd._flux_onset_history) == 0
 
     def test_beat_strength_from_flux(self):

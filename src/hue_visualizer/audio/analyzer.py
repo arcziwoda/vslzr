@@ -72,10 +72,12 @@ class AudioAnalyzer:
         sample_rate: int = 44100,
         fft_size: int = 2048,
         bass_boost: float = 2.0,
+        hop_size: int = 1024,
     ):
         self.sample_rate = sample_rate
         self.fft_size = fft_size
         self.bass_boost = bass_boost
+        self.hop_size = hop_size
 
         # Pre-compute Hann window
         self._window = np.hanning(fft_size)
@@ -106,8 +108,8 @@ class AudioAnalyzer:
         self._mel_max = np.ones(self._n_mel_bands) * 1e-6
         self._mel_max_decay = 0.995  # Same decay as 7-band system
 
-        # Sliding-window RMS normalization (~5 seconds at ~43 fps)
-        self._rms_window_size = int(5.0 * sample_rate / fft_size * 2)  # ~215 frames
+        # Sliding-window RMS normalization (~5 seconds at audio frame rate)
+        self._rms_window_size = int(5.0 * sample_rate / hop_size)  # ~215 frames at 44100/1024
         self._rms_history: deque[float] = deque(maxlen=self._rms_window_size)
         self._rms_floor = 1e-4  # Minimum RMS to avoid division by zero in silence
 
@@ -166,8 +168,8 @@ class AudioAnalyzer:
         magnitude = np.abs(fft_complex)
         power = magnitude**2
 
-        # Store magnitude spectrum for visualization (dB scale, clamped)
-        magnitude_db = 20 * np.log10(magnitude + 1e-10)
+        # Store magnitude spectrum for visualization (dBFS scale, normalized by N/2)
+        magnitude_db = 20 * np.log10(magnitude / (self.fft_size / 2) + 1e-10)
         features.spectrum = magnitude_db
 
         # Band energies

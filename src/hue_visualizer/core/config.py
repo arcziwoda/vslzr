@@ -78,12 +78,6 @@ class Settings(BaseSettings):
     )
 
     # Beat Detection Configuration
-    beat_threshold_multiplier: float = Field(
-        default=1.4,
-        description="Legacy beat threshold multiplier — unused, adaptive Parallelcube threshold is used instead",
-        ge=1.0,
-        le=3.0,
-    )
     beat_cooldown_ms: int = Field(
         default=300,
         description="Minimum inter-beat interval in milliseconds",

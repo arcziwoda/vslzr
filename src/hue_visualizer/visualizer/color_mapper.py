@@ -56,15 +56,11 @@ class ColorMapper:
     def __init__(
         self,
         gamma: float = 2.2,
-        brightness_alpha_attack: float = 0.5,
-        brightness_alpha_release: float = 0.1,
         saturation_alpha: float = 0.15,
         color_mode: str = COLOR_MODE_PALETTE,
         saturation_boost: float = 1.0,
     ):
         self.gamma = gamma
-        self.brightness_alpha_attack = brightness_alpha_attack
-        self.brightness_alpha_release = brightness_alpha_release
         self.saturation_alpha = saturation_alpha
         self._color_mode = color_mode if color_mode in COLOR_MODES else COLOR_MODE_PALETTE
 
@@ -146,14 +142,8 @@ class ColorMapper:
         # as a clean scaling factor that doesn't interfere with EMA dynamics.
         final_saturation = self._saturation * self._saturation_boost
 
-        # --- Brightness from RMS (gamma-corrected) ---
-        target_brightness = min(1.0, features.rms ** (1.0 / self.gamma))
-        alpha = (
-            self.brightness_alpha_attack
-            if target_brightness > self._brightness
-            else self.brightness_alpha_release
-        )
-        self._brightness = _ema(self._brightness, target_brightness, alpha)
+        # --- Brightness from RMS (gamma-corrected, no EMA — engine handles smoothing) ---
+        self._brightness = min(1.0, features.rms ** (1.0 / self.gamma))
 
         return (hue_result, final_saturation, self._brightness)
 

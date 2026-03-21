@@ -15,7 +15,6 @@ class TestPresets:
 
     def test_preset_values_in_range(self):
         for name, p in PRESETS.items():
-            assert 1.0 <= p.beat_threshold <= 3.0, f"{name}: bad threshold"
             assert 50 <= p.beat_cooldown_ms <= 1000, f"{name}: bad cooldown"
             assert 1.0 <= p.bass_boost <= 5.0, f"{name}: bad bass_boost"
             assert 0.0 < p.attack_alpha <= 1.0, f"{name}: bad attack"
@@ -24,7 +23,7 @@ class TestPresets:
     def test_preset_is_frozen(self):
         p = PRESETS["techno"]
         try:
-            p.beat_threshold = 999
+            p.beat_cooldown_ms = 999
             assert False, "Should be frozen"
         except AttributeError:
             pass

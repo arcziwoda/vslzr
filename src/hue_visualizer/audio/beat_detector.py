@@ -47,14 +47,12 @@ class BeatDetector:
         self,
         sample_rate: int = 44100,
         hop_size: int = 1024,
-        threshold_multiplier: float = 1.4,
         cooldown_ms: float = 300,
         bpm_min: float = 80.0,
         bpm_max: float = 180.0,
     ):
         self.sample_rate = sample_rate
         self.hop_size = hop_size
-        self.base_threshold = threshold_multiplier
         self._manual_cooldown_sec = cooldown_ms / 1000.0
         self.cooldown_sec = self._manual_cooldown_sec
         self.auto_cooldown = True  # Auto-adjust cooldown based on BPM
@@ -69,7 +67,6 @@ class BeatDetector:
         # Energy history (~1.5 seconds for threshold)
         history_len = int(self._frame_rate * 1.5)
         self._bass_history: deque[float] = deque(maxlen=max(history_len, 30))
-        self._flux_history: deque[float] = deque(maxlen=max(history_len, 30))
 
         # --- Flux-based onset detection ---
         # Log compression parameter (gamma ~ 100 for log(1 + gamma * |X|))
@@ -128,10 +125,6 @@ class BeatDetector:
         self._prediction_window: deque[tuple[float, bool]] = deque(
             maxlen=max(prediction_window_size, 20)
         )
-        # Next predicted beat time from PLL (recorded when phase crosses 0)
-        self._next_predicted_beat: float = 0.0
-        # Whether we already recorded the current prediction cycle
-        self._prediction_recorded: bool = False
         self._prediction_confidence: float = 0.0
 
         # --- Per-band onset detection (Task 1.5) ---
@@ -183,7 +176,6 @@ class BeatDetector:
         # Log compression: Gamma(X) = log(1 + gamma * |X|)
         raw_flux = features.spectral_flux
         compressed_flux = float(np.log1p(self._flux_gamma * raw_flux))
-        self._flux_history.append(compressed_flux)
         self._flux_onset_history.append(compressed_flux)
 
         # Compute flux adaptive threshold (moving median over ~0.2s window)
@@ -333,7 +325,7 @@ class BeatDetector:
         # (research minimum: 300ms refractory period)
         if self.auto_cooldown and self._display_bpm > 0:
             beat_period = 60.0 / self._display_bpm
-            self.cooldown_sec = max(0.25, beat_period * 0.75)
+            self.cooldown_sec = max(0.30, beat_period * 0.75)
 
         # Fill output
         info.bpm = round(self._display_bpm, 1)
@@ -533,7 +525,6 @@ class BeatDetector:
     def reset(self) -> None:
         """Reset all state."""
         self._bass_history.clear()
-        self._flux_history.clear()
         self._flux_onset_history.clear()
         self._onset_buffer.clear()
         self._frame_count = 0
@@ -559,15 +550,9 @@ class BeatDetector:
 
         # Prediction-ratio confidence state (Task 2.2)
         self._prediction_window.clear()
-        self._next_predicted_beat = 0.0
-        self._prediction_recorded = False
         self._prediction_confidence = 0.0
 
     # --- Public setters for genre preset configuration ---
-
-    def set_threshold(self, multiplier: float) -> None:
-        """Set the base beat detection threshold multiplier."""
-        self.base_threshold = multiplier
 
     def set_cooldown(self, ms: float) -> None:
         """Set the manual cooldown in milliseconds and re-enable auto-cooldown."""

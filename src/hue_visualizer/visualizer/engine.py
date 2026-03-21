@@ -68,25 +68,22 @@ INTENSITY_CHILL = "chill"
 INTENSITY_LEVELS = [INTENSITY_INTENSE, INTENSITY_NORMAL, INTENSITY_CHILL]
 
 # Multipliers applied on top of base parameter values.
-# Keys: flash_tau, attack_alpha, max_brightness, beat_threshold
+# Keys: flash_tau, attack_alpha, max_brightness
 INTENSITY_MULTIPLIERS: dict[str, dict[str, float]] = {
     INTENSITY_INTENSE: {
         "flash_tau": 0.7,
         "attack_alpha": 1.3,
         "max_brightness": 1.0,
-        "beat_threshold": 0.85,
     },
     INTENSITY_NORMAL: {
         "flash_tau": 1.0,
         "attack_alpha": 1.0,
         "max_brightness": 0.85,
-        "beat_threshold": 1.0,
     },
     INTENSITY_CHILL: {
         "flash_tau": 1.5,
         "attack_alpha": 0.6,
         "max_brightness": 0.6,
-        "beat_threshold": 1.2,
     },
 }
 
@@ -399,7 +396,9 @@ class EffectEngine:
         self._base_max_flash_hz = max_flash_hz
         self._min_flash_interval = 1.0 / max(max_flash_hz, 0.1)
         self._last_flash_time = 0.0
-        self._last_onset_flash_time = 0.0  # Separate rate limiter for per-band onsets
+        # Global rate limiter: tracks last flash from ANY source (beat/bass/sparkle)
+        # to ensure combined visual flash rate stays below max_flash_hz safety limit.
+        self._last_any_flash_time = 0.0
 
         # --- Safe mode (Task 2.5) ---
         self._safe_mode: bool = False
@@ -646,8 +645,9 @@ class EffectEngine:
         # DROP: fire a massive flash on transition (all lights full brightness)
         if self._drop_flash_pending:
             self._drop_flash_pending = False
-            if (now - self._last_flash_time) >= self._min_flash_interval:
+            if (now - self._last_any_flash_time) >= self._min_flash_interval:
                 self._last_flash_time = now
+                self._last_any_flash_time = now
                 for light in self._lights:
                     light.flash_brightness = 1.0  # Max flash for drop
                     light.flash_onset_this_tick = True
@@ -664,8 +664,9 @@ class EffectEngine:
             # BUILDUP: amplify beat flash as buildup progresses
             if section.section == Section.BUILDUP:
                 flash_strength = min(1.0, flash_strength * (1.0 + 0.5 * section.intensity))
-            if (now - self._last_flash_time) >= self._min_flash_interval:
+            if (now - self._last_any_flash_time) >= self._min_flash_interval:
                 self._last_flash_time = now
+                self._last_any_flash_time = now
                 # Task 1.13: Only flash active lights when effects_size < 1.0
                 for idx, light in enumerate(self._lights):
                     if idx in self._active_lights:
@@ -680,9 +681,10 @@ class EffectEngine:
         # --- 5c-manual. Manual flash/strobe trigger (Task 2.17) ---
         # Manual flashes are processed independently, respecting safety limiter.
         if self._manual_flash_pending > 0:
-            if (now - self._last_flash_time) >= self._min_flash_interval:
+            if (now - self._last_any_flash_time) >= self._min_flash_interval:
                 self._manual_flash_pending -= 1
                 self._last_flash_time = now
+                self._last_any_flash_time = now
                 manual_strength = 1.0
                 if self._safe_mode:
                     manual_strength = 0.7
@@ -714,14 +716,22 @@ class EffectEngine:
             self.spatial_mapper._wave_pulse_active = True
 
         # --- 5d. Bass pulse overlay (Task 1.10) ---
-        # Kick onset triggers red/orange pulse on bass-dominant lights
-        # Gated by onset rate limiter to prevent too-frequent flashing
-        if beat_info.kick_onset and (now - self._last_onset_flash_time) >= self._min_flash_interval:
+        # Kick onset triggers red/orange pulse on bass-dominant lights.
+        # Global rate limiter: prevents new flash if a PREVIOUS tick already fired.
+        # Same-tick co-firing with beat flash is allowed (they're the same musical event).
+        if beat_info.kick_onset:
             bass_strength = min(1.0, beat_info.kick_energy * self._bass_pulse_intensity * 2.0)
             # Map bass energy to hue within red-orange range (0-30 deg)
             bass_hue = self._bass_pulse_hue_min + (
                 self._bass_pulse_hue_max - self._bass_pulse_hue_min
             ) * (1.0 - min(1.0, beat_info.kick_energy))  # Lower energy -> more orange
+
+            # Allow if: global limiter passed OR a beat flash already fired this tick
+            # (same-tick events are one visual event, not separate flashes)
+            can_flash = (
+                (now - self._last_any_flash_time) >= self._min_flash_interval
+                or self._last_any_flash_time == now  # beat flash fired this tick
+            )
 
             mode = self.spatial_mapper.mode
             for i, light in enumerate(self._lights):
@@ -735,17 +745,21 @@ class EffectEngine:
                     else:
                         bass_weight = 1.0 - pos  # Low positions = bass
                     # Apply with spatial weighting
-                    light.bass_pulse_brightness = bass_strength * (0.3 + 0.7 * bass_weight)
+                    if can_flash:
+                        light.bass_pulse_brightness = bass_strength * (0.3 + 0.7 * bass_weight)
                 else:
                     # Uniform/wave: apply to all lights equally
-                    light.bass_pulse_brightness = bass_strength
+                    if can_flash:
+                        light.bass_pulse_brightness = bass_strength
+                # Always set hue overlay (color shift is not a safety concern)
                 light.bass_pulse_hue = bass_hue
-            self._last_onset_flash_time = now
+            if can_flash:
+                self._last_any_flash_time = now
 
         # --- 5e. Treble sparkle overlay (Task 1.9) ---
-        # Hi-hat onset triggers brief blue/violet flicker on 1-2 random lights
-        # Gated by onset rate limiter to prevent stacking with other flashes
-        if beat_info.hihat_onset and (now - self._last_onset_flash_time) >= self._min_flash_interval:
+        # Hi-hat onset triggers brief blue/violet flicker on 1-2 random lights.
+        # Same-tick co-firing logic as bass pulse.
+        if beat_info.hihat_onset:
             sparkle_strength = min(1.0, beat_info.hihat_energy * self._sparkle_intensity * 2.0)
             # Random hue within blue-violet range
             sparkle_hue = random.uniform(self._sparkle_hue_min, self._sparkle_hue_max)
@@ -759,10 +773,18 @@ class EffectEngine:
                     available = preferred
             sparkle_targets = random.sample(available, n_sparkle)
             self._sparkle_last_lights = sparkle_targets
+
+            can_flash = (
+                (now - self._last_any_flash_time) >= self._min_flash_interval
+                or self._last_any_flash_time == now
+            )
             for idx in sparkle_targets:
-                self._lights[idx].sparkle_brightness = sparkle_strength
+                if can_flash:
+                    self._lights[idx].sparkle_brightness = sparkle_strength
+                # Always set hue overlay
                 self._lights[idx].sparkle_hue = sparkle_hue
-            self._last_onset_flash_time = now
+            if can_flash:
+                self._last_any_flash_time = now
 
         # --- 6. Per-light: flash decay + EMA smoothing + safety ---
         # Section-modulated flash decay (faster during DROP for punchy feel)
@@ -1618,7 +1640,18 @@ class EffectEngine:
         self.spatial_mapper = SpatialMapper(
             num_lights=num_lights, mode=self.spatial_mapper.mode
         )
-        self._light_groups = list(range(num_lights))
+        # Update generative layer to match new light count
+        self._generative = GenerativeLayer(
+            num_lights=num_lights,
+            hue_cycle_period=self._generative.hue_cycle_period,
+            breathing_rate_hz=self._generative.breathing_rate_hz,
+            breathing_min=self._generative.breathing_min,
+            breathing_max=self._generative.breathing_max,
+            wave_speed=self._generative.wave_speed,
+            base_saturation=self._generative.base_saturation,
+        )
+        self._generative.set_palette(self._palette)
+        self._compute_light_groups()
         self._update_active_lights()
         logger.info(f"EffectEngine: num_lights changed to {num_lights}")
 
@@ -1636,7 +1669,6 @@ class EffectEngine:
         - flash_tau: shorter = snappier flashes
         - attack_alpha: higher = faster attack response
         - max_brightness: caps the maximum light output
-        - beat_threshold: returned for pipeline to apply externally
 
         Args:
             level: One of 'intense', 'normal', 'chill'.
@@ -1654,13 +1686,6 @@ class EffectEngine:
         # Clamp attack_alpha to valid range
         self.attack_alpha = max(0.01, min(1.0, self.attack_alpha))
         self._max_brightness = mult["max_brightness"]
-
-    def get_intensity_beat_threshold_multiplier(self) -> float:
-        """Return the beat threshold multiplier for the current intensity.
-
-        The server applies this externally to the beat detector.
-        """
-        return INTENSITY_MULTIPLIERS[self._intensity_level]["beat_threshold"]
 
     def set_base_attack_alpha(self, alpha: float) -> None:
         """Set the base attack alpha (from genre preset) and reapply intensity.
@@ -1792,6 +1817,7 @@ class EffectEngine:
         self._generative.reset()
         self._lights = [_LightSmoothed() for _ in range(self.num_lights)]
         self._last_flash_time = 0.0
+        self._last_any_flash_time = 0.0
         self._base_hue_offset = 0.0
         self._rotation_phase = 0.0
         self._beat_count = 0
