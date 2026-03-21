@@ -23,7 +23,7 @@ if %errorlevel% neq 0 (
 echo.
 
 :: ---- Install Python 3.12 ----
-:: python-mbedtls has no wheels for 3.13+, so we MUST use 3.12
+:: python-mbedtls has no wheels for 3.13+, so we MUST use 3.12.x
 echo Installing Python 3.12 (required for python-mbedtls)...
 uv python install 3.12
 if %errorlevel% neq 0 (
@@ -32,32 +32,32 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: ---- Force venv with Python 3.12 ----
-:: Remove existing venv to prevent uv from reusing a 3.13 one
+:: ---- Create venv with exactly Python 3.12 ----
 if exist .venv (
     echo Removing existing venv...
     rmdir /s /q .venv
 )
 echo Creating venv with Python 3.12...
-uv venv --python cpython-3.12
+uv venv --python ">=3.12,<3.13"
 if %errorlevel% neq 0 (
     echo ERROR: Failed to create Python 3.12 venv.
     pause
     exit /b 1
 )
 
-:: ---- Install dependencies into 3.12 venv ----
+:: ---- Verify Python version ----
+echo Verifying Python version in venv...
+.venv\Scripts\python --version
+echo.
+
+:: ---- Install dependencies (no --python flag = uses existing venv) ----
 echo Installing dependencies...
-uv sync --python cpython-3.12
+uv sync
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install dependencies.
     pause
     exit /b 1
 )
-echo.
-
-:: ---- Verify Python version ----
-uv run python --version
 echo.
 
 :: ---- Build with PyInstaller ----
