@@ -29,6 +29,7 @@ packages = ["src/hue_visualizer"]
 [dependency-groups]
 dev = [
     "black>=25.11.0",
+    "pyinstaller>=6.0",
     "pytest>=9.0.1",
     "pytest-asyncio>=1.3.0",
     "ruff>=0.14.5",

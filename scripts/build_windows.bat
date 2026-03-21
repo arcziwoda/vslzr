@@ -22,15 +22,27 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-:: ---- Install Python 3.12 + dependencies ----
-echo Installing Python 3.12 and project dependencies...
+:: ---- Install Python 3.12 ----
+echo Installing Python 3.12...
 uv python install 3.12
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install Python 3.12.
     pause
     exit /b 1
 )
-uv sync --python 3.12
+
+:: ---- Pin Python 3.12 and recreate venv ----
+:: python-mbedtls has no wheels for 3.13+, so we MUST use 3.12
+echo Pinning Python 3.12 for this project...
+uv python pin 3.12
+if exist .venv (
+    echo Removing existing venv to ensure Python 3.12...
+    rmdir /s /q .venv
+)
+
+:: ---- Install dependencies ----
+echo Installing dependencies with Python 3.12...
+uv sync
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install dependencies.
     pause
@@ -47,6 +59,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo.
+
+:: ---- Clean up pin file (don't commit it) ----
+if exist .python-version del .python-version
 
 echo === Build complete! ===
 echo.
