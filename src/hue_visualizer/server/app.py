@@ -467,6 +467,7 @@ async def audio_loop():
                     dev = pipeline.capture.current_device_info
                     data["audio_device"] = dev["name"] if dev else None
                     data["audio_device_index"] = dev["index"] if dev else None
+                    data["audio_error"] = pipeline.capture._last_error
 
                 await manager.broadcast(json.dumps(data))
 
@@ -652,7 +653,7 @@ async def lifespan(app: FastAPI):
     _do_bridge_disconnect()
 
 
-app = FastAPI(title="Hue Visualizer", lifespan=lifespan)
+app = FastAPI(title="VSLZR", lifespan=lifespan)
 
 
 @app.get("/")

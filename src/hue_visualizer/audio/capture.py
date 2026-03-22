@@ -51,6 +51,7 @@ class AudioCapture:
         self._running = False
         self._device_channels = 1
         self._device_rate = sample_rate
+        self._last_error: Optional[str] = None
 
         # Ring buffer of normalized float32 frames
         self._frames: deque[np.ndarray] = deque(maxlen=max_queue_size)
@@ -102,6 +103,7 @@ class AudioCapture:
             raise AudioCaptureError(f"Failed to open audio stream: {e}") from e
 
         self._running = True
+        self._last_error = None
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
         logger.info("Audio capture started")
@@ -238,6 +240,8 @@ class AudioCapture:
     def _capture_loop(self) -> None:
         """Background thread: read audio frames continuously."""
         stereo = self._device_channels == 2
+        consecutive_errors = 0
+        max_errors = 10
         while self._running:
             try:
                 raw = self._stream.read(self.buffer_size, exception_on_overflow=False)
@@ -250,10 +254,21 @@ class AudioCapture:
                 with self._lock:
                     self._frames.append(samples)
                 self._frame_event.set()
+                consecutive_errors = 0
 
             except Exception as e:
-                if self._running:
-                    logger.error(f"Audio capture error: {e}")
+                if not self._running:
+                    break
+                consecutive_errors += 1
+                logger.error(f"Audio capture error ({consecutive_errors}/{max_errors}): {e}")
+                if consecutive_errors >= max_errors:
+                    self._last_error = str(e)
+                    self._running = False
+                    logger.error(
+                        "Audio stream lost — too many consecutive errors. "
+                        "Device may have been disconnected or locked by another application."
+                    )
+                    break
 
     def _get_device_info(self) -> dict:
         """Get info for the selected or default device."""

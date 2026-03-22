@@ -1,5 +1,5 @@
 [project]
-name = "hue-music-sync"
+name = "vslzr"
 version = "0.1.0"
 description = "Real-time music visualization for Philips Hue lights — FFT analysis, beat detection, and low-latency Entertainment API streaming"
 readme = "README.md"
@@ -38,9 +38,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/arcziwoda/hue_music_sync"
-Repository = "https://github.com/arcziwoda/hue_music_sync"
-Issues = "https://github.com/arcziwoda/hue_music_sync/issues"
+Homepage = "https://github.com/arcziwoda/vslzr"
+Repository = "https://github.com/arcziwoda/vslzr"
+Issues = "https://github.com/arcziwoda/vslzr/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hue_visualizer"]

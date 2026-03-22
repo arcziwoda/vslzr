@@ -35,29 +35,29 @@ jobs:
 
       - name: Verify build output
         run: |
-          if [ ! -d "dist/HueVisualizer.app" ]; then
-            echo "Build failed — HueVisualizer.app not found"
+          if [ ! -d "dist/VSLZR.app" ]; then
+            echo "Build failed — VSLZR.app not found"
             exit 1
           fi
-          echo "Build OK: $(du -sh dist/HueVisualizer.app | cut -f1)"
+          echo "Build OK: $(du -sh dist/VSLZR.app | cut -f1)"
 
       - name: Create DMG
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           mkdir -p dmg_contents
-          cp -R dist/HueVisualizer.app dmg_contents/
+          cp -R dist/VSLZR.app dmg_contents/
           ln -s /Applications dmg_contents/Applications
 
-          hdiutil create -volname "Hue Visualizer" \
+          hdiutil create -volname "VSLZR" \
             -srcfolder dmg_contents \
             -ov -format UDZO \
-            "HueVisualizer-${TAG_NAME}-macos-arm64.dmg"
+            "VSLZR-${TAG_NAME}-macos-arm64.dmg"
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           TAG_NAME: ${{ github.ref_name }}
         with:
-          files: HueVisualizer-${{ github.ref_name }}-macos-arm64.dmg
+          files: VSLZR-${{ github.ref_name }}-macos-arm64.dmg
           generate_release_notes: true

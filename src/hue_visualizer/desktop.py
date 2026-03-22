@@ -37,7 +37,7 @@ def _get_log_path():
 
     log_dir = _config_dir() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir / "hue-visualizer.log"
+    return log_dir / "vslzr.log"
 
 
 def _setup_logging():
@@ -135,9 +135,9 @@ def _create_tray_icon(url: str, server: uvicorn.Server):
         server.should_exit = True
 
     icon = pystray.Icon(
-        "hue-visualizer",
+        "vslzr",
         image,
-        "Hue Visualizer",
+        "VSLZR",
         menu=pystray.Menu(
             pystray.MenuItem("Open in Browser", on_open_browser, default=True),
             pystray.MenuItem("Show Logs", on_open_logs),

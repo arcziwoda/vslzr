@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Hue Visualizer Windows desktop app.
+"""PyInstaller spec for VSLZR Windows desktop app.
 
 Build with: uv run pyinstaller hue_visualizer.spec --clean
 """
@@ -78,7 +78,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="HueVisualizer",
+    name="VSLZR",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -95,5 +95,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name="HueVisualizer",
+    name="VSLZR",
 )

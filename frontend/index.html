@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HUE VISUALIZER</title>
+<title>VSLZR</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -413,6 +413,10 @@ body::after {
   line-height: 1;
 }
 .device-refresh:hover { border-color: var(--accent); color: var(--accent);
+}
+.audio-error {
+  color: #ff4444; font-size: 0.7rem; margin-left: 6px; max-width: 200px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Button group (for spatial mode / genre preset) */
@@ -1070,8 +1074,8 @@ body::after {
 <div class="container">
   <header class="header">
     <div class="title-block">
-      <div class="title-main">HUE</div>
-      <div class="title-sub">VISUALIZER</div>
+      <div class="title-main">VSLZR</div>
+      <div class="title-sub"></div>
     </div>
     <div class="header-right">
       <div class="header-input-group">
@@ -1080,6 +1084,7 @@ body::after {
           <option value="">Loading devices...</option>
         </select>
         <button class="device-refresh" id="btnRefreshDevices" title="Refresh device list">&#8635;</button>
+        <span class="audio-error" id="audioError" style="display:none"></span>
       </div>
       <button class="bridge-btn" id="btnBridge" title="Bridge setup">BRIDGE</button>
       <div class="status" id="status">
@@ -1285,7 +1290,7 @@ body::after {
 
 <script>
 /* ================================================================
-   HUE VISUALIZER — Dark Industrial Techno Control Panel
+   VSLZR — Dark Industrial Techno Control Panel
    WebSocket-driven real-time audio visualization
    ================================================================ */
 
@@ -1560,6 +1565,18 @@ function syncUIState(d) {
     var newVal = d.audio_device_index !== null ? String(d.audio_device_index) : '';
     if ($devSel.value !== newVal && !$devSel.disabled) {
       $devSel.value = newVal;
+    }
+  }
+
+  // Audio error indicator
+  var $audioErr = document.getElementById('audioError');
+  if ($audioErr) {
+    if (d.audio_error) {
+      $audioErr.textContent = 'Stream lost: device locked or disconnected';
+      $audioErr.title = d.audio_error;
+      $audioErr.style.display = '';
+    } else {
+      $audioErr.style.display = 'none';
     }
   }
 

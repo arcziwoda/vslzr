@@ -1,4 +1,4 @@
-# Hue Music Sync
+# VSLZR
 
 Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and adaptive beat detection, then drives the Hue Entertainment API for low-latency light control synchronized to your music.
 
@@ -7,7 +7,7 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 [![Hue Entertainment API](https://img.shields.io/badge/Hue-Entertainment%20API-orange.svg)](https://developers.meethue.com/)
 
 <!-- TODO: Add screenshot/demo GIF
-![Hue Music Sync UI](docs/assets/screenshot.png)
+![VSLZR UI](docs/assets/screenshot.png)
 -->
 
 ## Features
@@ -38,8 +38,8 @@ brew install portaudio mbedtls@2
 
 ```bash
 # Clone
-git clone https://github.com/arcziwoda/hue_music_sync.git
-cd hue_music_sync
+git clone https://github.com/arcziwoda/vslzr.git
+cd vslzr
 
 # Install dependencies (requires uv — https://docs.astral.sh/uv/)
 uv sync
@@ -102,7 +102,7 @@ Windows requires **Python 3.12** — the `python-mbedtls` dependency (needed for
 
 ### Pre-built Release
 
-Download the latest `.exe` from [GitHub Releases](https://github.com/arcziwoda/hue_music_sync/releases). Place your `.env` file next to the executable and run — it starts as a system tray icon and opens the browser automatically.
+Download the latest `.exe` from [GitHub Releases](https://github.com/arcziwoda/vslzr/releases). Place your `.env` file next to the executable and run — it starts as a system tray icon and opens the browser automatically.
 
 ## Development
 

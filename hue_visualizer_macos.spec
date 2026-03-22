@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for Hue Visualizer macOS .app bundle.
+"""PyInstaller spec for VSLZR macOS .app bundle.
 
 Build with: uv run pyinstaller hue_visualizer_macos.spec --clean
 """
@@ -78,7 +78,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="HueVisualizer",
+    name="VSLZR",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -95,24 +95,24 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="HueVisualizer",
+    name="VSLZR",
 )
 
 app = BUNDLE(
     coll,
-    name="HueVisualizer.app",
+    name="VSLZR.app",
     icon="assets/icon.icns",
-    bundle_identifier="com.arturkempinski.huevisualizer",
+    bundle_identifier="com.arturkempinski.vslzr",
     info_plist={
-        "CFBundleName": "Hue Visualizer",
-        "CFBundleDisplayName": "Hue Visualizer",
+        "CFBundleName": "VSLZR",
+        "CFBundleDisplayName": "VSLZR",
         "CFBundleShortVersionString": "1.0.0",
         "CFBundleVersion": "1.0.0",
         # Menu bar only — no Dock icon
         "LSUIElement": True,
         # Microphone access (required by macOS for audio capture)
         "NSMicrophoneUsageDescription": (
-            "Hue Visualizer needs microphone access to capture audio "
+            "VSLZR needs microphone access to capture audio "
             "for real-time music visualization on your Philips Hue lights."
         ),
         # High-DPI support

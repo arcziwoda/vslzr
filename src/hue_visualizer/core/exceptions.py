@@ -1,8 +1,8 @@
-"""Custom exceptions for the Hue Visualizer application."""
+"""Custom exceptions for the VSLZR application."""
 
 
 class HueVisualizerError(Exception):
-    """Base exception for all Hue Visualizer errors."""
+    """Base exception for all VSLZR errors."""
 
     pass
 
