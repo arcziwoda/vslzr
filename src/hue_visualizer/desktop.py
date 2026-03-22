@@ -31,20 +31,42 @@ def _fix_windowed_stdio():
         sys.stderr = open(os.devnull, "w")
 
 
+def _get_log_path():
+    """Return path to the log file in the user's config directory."""
+    from hue_visualizer.core.persistence import _config_dir
+
+    log_dir = _config_dir() / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "hue-visualizer.log"
+
+
 def _setup_logging():
-    """Configure logging (same as __main__.py)."""
+    """Configure logging with file output for desktop builds."""
+    from logging.handlers import RotatingFileHandler
+
     root = logging.getLogger()
     root.setLevel(logging.WARNING)
 
-    handler = logging.StreamHandler()
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+    fmt = logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+
+    # Console handler (goes to devnull in windowed mode, but useful for dev)
+    console = logging.StreamHandler()
+    console.setFormatter(fmt)
+
+    # File handler — persists across sessions, rotates at 5 MB, keeps 3 backups
+    log_path = _get_log_path()
+    file_handler = RotatingFileHandler(
+        log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
     )
+    file_handler.setFormatter(fmt)
 
     for name in ("hue_visualizer", "uvicorn"):
         lg = logging.getLogger(name)
         lg.setLevel(logging.INFO)
-        lg.addHandler(handler)
+        lg.addHandler(console)
+        lg.addHandler(file_handler)
+
+    logging.getLogger(__name__).info(f"Log file: {log_path}")
 
 
 def _find_available_port(host: str, preferred: int) -> int:
@@ -99,6 +121,15 @@ def _create_tray_icon(url: str, server: uvicorn.Server):
     def on_open_browser(icon, item):
         webbrowser.open(url)
 
+    def on_open_logs(icon, item):
+        log_path = _get_log_path()
+        if sys.platform == "win32":
+            os.startfile(str(log_path.parent))
+        elif sys.platform == "darwin":
+            import subprocess
+
+            subprocess.Popen(["open", str(log_path.parent)])
+
     def on_quit(icon, item):
         icon.stop()
         server.should_exit = True
@@ -109,6 +140,7 @@ def _create_tray_icon(url: str, server: uvicorn.Server):
         "Hue Visualizer",
         menu=pystray.Menu(
             pystray.MenuItem("Open in Browser", on_open_browser, default=True),
+            pystray.MenuItem("Show Logs", on_open_logs),
             pystray.MenuItem("Quit", on_quit),
         ),
     )

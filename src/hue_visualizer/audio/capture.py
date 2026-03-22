@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 # PyAudio format: 16-bit signed int
 FORMAT = pyaudio.paInt16
-CHANNELS = 1
 DTYPE = np.int16
 MAX_INT16 = 32768.0  # For normalization to [-1.0, 1.0]
 
@@ -50,6 +49,8 @@ class AudioCapture:
         self._stream: Optional[pyaudio.Stream] = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
+        self._device_channels = 1
+        self._device_rate = sample_rate
 
         # Ring buffer of normalized float32 frames
         self._frames: deque[np.ndarray] = deque(maxlen=max_queue_size)
@@ -64,16 +65,34 @@ class AudioCapture:
         self._pa = pyaudio.PyAudio()
 
         device_info = self._get_device_info()
+        device_channels = int(device_info.get("maxInputChannels", 1))
+        device_rate = int(device_info.get("defaultSampleRate", self.sample_rate))
+
         logger.info(
-            f"Opening audio: {device_info.get('name')} "
-            f"@ {self.sample_rate}Hz, buffer={self.buffer_size}"
+            f"Audio device: {device_info.get('name')} — "
+            f"{device_channels}ch, {device_rate}Hz native, "
+            f"hostApi={device_info.get('hostApi')}, "
+            f"index={device_info.get('index', self.device_index)}"
+        )
+
+        # Use device's native channel count (stereo for DJ controllers, mono for mics)
+        # and downmix to mono in _capture_loop
+        self._device_channels = min(device_channels, 2)
+
+        # Use device's native sample rate in WASAPI shared mode to avoid
+        # sample rate conversion failures (e.g. DDJ-FLX4 runs at 48kHz)
+        self._device_rate = device_rate
+
+        logger.info(
+            f"Opening stream: {self._device_channels}ch @ {self._device_rate}Hz, "
+            f"buffer={self.buffer_size}"
         )
 
         try:
             self._stream = self._pa.open(
                 format=FORMAT,
-                channels=CHANNELS,
-                rate=self.sample_rate,
+                channels=self._device_channels,
+                rate=self._device_rate,
                 input=True,
                 input_device_index=self.device_index,
                 frames_per_buffer=self.buffer_size,
@@ -146,6 +165,8 @@ class AudioCapture:
                 "name": info["name"],
                 "channels": info["maxInputChannels"],
                 "sample_rate": int(info["defaultSampleRate"]),
+                "stream_channels": getattr(self, "_device_channels", 1),
+                "stream_rate": getattr(self, "_device_rate", self.sample_rate),
             }
         except Exception:
             return None
@@ -209,10 +230,15 @@ class AudioCapture:
 
     def _capture_loop(self) -> None:
         """Background thread: read audio frames continuously."""
+        stereo = self._device_channels == 2
         while self._running:
             try:
                 raw = self._stream.read(self.buffer_size, exception_on_overflow=False)
                 samples = np.frombuffer(raw, dtype=DTYPE).astype(np.float32) / MAX_INT16
+
+                if stereo:
+                    # Downmix stereo to mono: average L and R channels
+                    samples = samples.reshape(-1, 2).mean(axis=1)
 
                 with self._lock:
                     self._frames.append(samples)

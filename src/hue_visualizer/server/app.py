@@ -860,6 +860,28 @@ async def list_audio_devices():
 
 
 # ---------------------------------------------------------------------------
+# Diagnostics
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/diagnostics")
+async def diagnostics():
+    """Return paths and info useful for debugging."""
+    from ..core.persistence import get_config_path
+
+    info = {"config_path": get_config_path(), "log_path": None}
+
+    try:
+        from ..desktop import _get_log_path
+
+        info["log_path"] = str(_get_log_path())
+    except Exception:
+        pass
+
+    return info
+
+
+# ---------------------------------------------------------------------------
 # WebSocket control message handler
 # ---------------------------------------------------------------------------
 
