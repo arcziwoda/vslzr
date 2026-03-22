@@ -22,8 +22,14 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-:: ---- Install Python 3.12 ----
+:: ---- Pin Python 3.12 for this build ----
 :: python-mbedtls has no wheels for 3.13+, so we MUST use 3.12.x
+:: Override .python-version so uv sync/run don't switch to 3.13
+if exist .python-version (
+    copy .python-version .python-version.bak >nul
+)
+echo 3.12> .python-version
+
 echo Installing Python 3.12 (required for python-mbedtls)...
 uv python install 3.12
 if %errorlevel% neq 0 (
@@ -50,9 +56,9 @@ echo Verifying Python version in venv...
 .venv\Scripts\python --version
 echo.
 
-:: ---- Install dependencies (no --python flag = uses existing venv) ----
+:: ---- Install dependencies ----
 echo Installing dependencies...
-uv sync
+uv sync --python ">=3.12,<3.13"
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install dependencies.
     pause
@@ -70,8 +76,12 @@ if %errorlevel% neq 0 (
 )
 echo.
 
-:: ---- Clean up ----
-if exist .python-version del .python-version
+:: ---- Restore .python-version ----
+if exist .python-version.bak (
+    move /y .python-version.bak .python-version >nul
+) else (
+    if exist .python-version del .python-version
+)
 
 echo === Build complete! ===
 echo.

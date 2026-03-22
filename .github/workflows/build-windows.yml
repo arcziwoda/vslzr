@@ -1,0 +1,51 @@
+name: Build Windows EXE
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Pin Python 3.12
+        run: uv python pin 3.12
+
+      - name: Install dependencies
+        run: uv sync --python ">=3.12,<3.13"
+
+      - name: Build with PyInstaller
+        run: uv run pyinstaller hue_visualizer.spec --clean
+
+      - name: Verify build output
+        run: |
+          if (!(Test-Path "dist\HueVisualizer\HueVisualizer.exe")) {
+            Write-Error "Build failed — HueVisualizer.exe not found"
+            exit 1
+          }
+          Write-Output "Build OK: $(Get-Item dist\HueVisualizer\HueVisualizer.exe | Select-Object -ExpandProperty Length) bytes"
+
+      - name: Create ZIP archive
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: Compress-Archive -Path dist\HueVisualizer\* -DestinationPath "HueVisualizer-${env:TAG_NAME}-windows-x64.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        with:
+          files: HueVisualizer-${{ github.ref_name }}-windows-x64.zip
+          generate_release_notes: true

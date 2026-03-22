@@ -5,6 +5,9 @@ Runs uvicorn in a background thread, opens the browser, and shows a system tray 
 """
 
 import logging
+import multiprocessing
+import os
+import sys
 import threading
 import webbrowser
 
@@ -12,6 +15,18 @@ import uvicorn
 from dotenv import load_dotenv
 
 from hue_visualizer.core.paths import get_env_path, get_base_dir
+
+
+def _fix_windowed_stdio():
+    """Redirect stdout/stderr to devnull when running as --windowed PyInstaller app.
+
+    PyInstaller with console=False sets sys.stdout/stderr to None,
+    which crashes logging.StreamHandler and any print() calls.
+    """
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
 
 
 def _setup_logging():
@@ -68,6 +83,8 @@ def _create_tray_icon(url: str, server: uvicorn.Server):
 
 
 def main():
+    _fix_windowed_stdio()
+
     env_path = get_env_path()
     if env_path:
         load_dotenv(dotenv_path=env_path)
@@ -109,4 +126,5 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()

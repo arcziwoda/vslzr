@@ -12,5 +12,8 @@ wheels/
 # Environment variables (credentials)
 .env
 
+# Claude Code local settings (personal, not shared)
+.claude/settings.local.json
+
 # Override global gitignore — keep PyInstaller spec in repo
 !*.spec

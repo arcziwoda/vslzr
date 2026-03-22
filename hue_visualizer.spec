@@ -31,6 +31,8 @@ a = Analysis(
         "starlette.responses",
         "starlette.middleware",
         "multipart",
+        # pystray (platform-specific backend loaded dynamically)
+        "pystray._win32",
         # hue_visualizer modules
         "hue_visualizer",
         "hue_visualizer.server.app",

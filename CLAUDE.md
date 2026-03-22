@@ -5,7 +5,7 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 ## Architecture
 
 ```
-[Mic/System Audio] → PyAudio → AudioCapture (thread) → ring buffer
+[Mic/System Audio] → PyAudio/PyAudioWPatch → AudioCapture (thread) → ring buffer
                                     ↓
                         AudioAnalyzer (FFT 2048 Hann) → AudioFeatures
                                     ↓
@@ -24,12 +24,6 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 
 All audio processing and light control in Python backend. Web UI is a control panel + real-time visualization.
 
-## Current Status
-
-Full pipeline operational: audio → FFT → beat detection → hybrid effect engine → Hue Entertainment API + WebSocket → browser visualization. P0/P1/P2 backlog complete — STFT overlap, predictive beats, hybrid reactive-generative engine, section detection, per-band onsets, spatial effects, palettes, UI controls, safety improvements.
-
-See `BACKLOG.md` for remaining items and research spec references.
-
 ## Development
 
 ### Package Management — uv only
@@ -42,12 +36,15 @@ uv run python <script>       # Run anything
 uv run pytest                # Tests
 ```
 
-### System Dependencies (macOS)
+### System Dependencies
 
+**macOS:**
 ```bash
 brew install portaudio       # PyAudio
 brew install mbedtls@2       # Entertainment API (DTLS)
 ```
+
+**Windows:** No system deps needed — all bundled in Python wheels. Requires Python 3.12 (python-mbedtls has no 3.13 wheels).
 
 ### Running
 
@@ -57,22 +54,40 @@ uv run python scripts/test_audio.py            # Test audio pipeline (terminal)
 uv run python scripts/test_entertainment.py    # Test Hue Entertainment API
 ```
 
+### Windows Build (PyInstaller → .exe)
+
+**CI (preferred):** Push a version tag to trigger GitHub Actions build + release:
+```bash
+git tag v1.0.0
+git push --tags
+# → GitHub Release with HueVisualizer-v1.0.0-windows-x64.zip
+```
+
+**Local:** Run on a Windows machine:
+```bash
+scripts\build_windows.bat    # Auto-installs uv + Python 3.12 + deps, builds dist\HueVisualizer\
+```
+
+Output: `dist\HueVisualizer\HueVisualizer.exe` — system tray icon, auto-opens browser. Place `.env` next to .exe for bridge config.
+
 ## Project Structure
 
 ```
 src/hue_visualizer/
-├── __main__.py                # Entry point (uvicorn + dotenv)
+├── __main__.py                # Entry point — macOS/dev (uvicorn + dotenv + path resolution)
+├── desktop.py                 # Entry point — Windows desktop (system tray + browser auto-open)
 ├── core/
 │   ├── config.py              # Pydantic Settings (all params from .env)
 │   ├── exceptions.py          # Custom exception hierarchy
-│   └── persistence.py         # State persistence (bridge config, presets)
+│   ├── paths.py               # PyInstaller-aware path resolution (frozen vs dev mode)
+│   └── persistence.py         # State persistence (bridge config, audio device) via platformdirs
 ├── bridge/
 │   ├── connection.py          # HueBridge REST API wrapper
 │   ├── discovery.py           # Bridge discovery & pairing
 │   ├── entertainment_controller.py  # Entertainment API (DTLS streaming)
 │   └── effects.py             # Tick-based effects (PulseEffect, BreatheEffect, StrobeEffect, FlashDecayEffect, ColorCycleEffect)
 ├── audio/
-│   ├── capture.py             # PyAudio wrapper, threaded capture, ring buffer
+│   ├── capture.py             # PyAudio/PyAudioWPatch wrapper, threaded capture, ring buffer
 │   ├── analyzer.py            # FFT (2048 Hann, 50% overlap), 7-band energies, Mel filterbank, spectral features
 │   ├── beat_detector.py       # Adaptive beat detection, per-band onsets, BPM estimation, PLL
 │   └── section_detector.py    # Section detection (drop/buildup/breakdown awareness)
@@ -89,8 +104,10 @@ src/hue_visualizer/
 frontend/
 └── index.html                 # Single-file web UI (dark industrial techno, canvas viz, vanilla JS)
 
-scripts/                       # Setup & test scripts
+assets/                        # App icons (system tray + .exe)
+scripts/                       # Setup, test & build scripts (incl. build_windows.bat)
 docs/                          # Research documents
+hue_visualizer.spec            # PyInstaller build config for Windows .exe
 ```
 
 ## Non-Obvious Design Decisions
@@ -105,6 +122,11 @@ docs/                          # Research documents
 - **Strobe system**: pipeline override (like calibration mode) — when active, `_tick_strobe()` replaces full pipeline output with white/black alternation. Auto-strobe triggers on DROP section and sustained high energy (toggle via UI). Manual burst always available. Safety: max 3 Hz (2 Hz safe mode), self-terminating cycle count.
 - **Genre presets**: `_apply_genre_preset()` updates pipeline + engine atomically, uses `set_base_attack_alpha()` to preserve intensity multiplier
 - **Light send rate**: configurable via `fps_target` (default 50 Hz) — oversampling compensates for UDP packet loss
+- **Cross-platform paths**: `core/paths.py` detects PyInstaller frozen mode (`sys._MEIPASS`) for resource paths; `persistence.py` uses `platformdirs` for config dir (macOS: `~/Library/Application Support`, Windows: `AppData/Roaming`, Linux: XDG)
+- **Two entry points**: `__main__.py` for macOS/dev (blocking uvicorn), `desktop.py` for Windows (threaded uvicorn + pystray tray icon)
+- **Audio library**: PyAudio on macOS, PyAudioWPatch on Windows (drop-in replacement with WASAPI loopback support) — conditional import in `capture.py`
+- **Python version split**: `requires-python >= 3.11` in pyproject.toml. macOS uses 3.13 (python-mbedtls compiles from source via `brew install mbedtls@2`). Windows MUST use 3.12 — python-mbedtls has no 3.13 wheels and repo is archived (Jan 2026), no future wheels expected. Build script overrides `.python-version` to force 3.12.
+- **python-mbedtls is archived**: only transitive dep (via `hue-entertainment-pykit` for DTLS). No drop-in replacement exists — pyOpenSSL has DTLS but no PSK support yet. Safe until Python 3.12 EOL (Oct 2028)
 
 ## Configuration (.env)
 
@@ -143,10 +165,6 @@ uv run pytest -k "test_name"              # Single test by name
 
 - `docs/cemplex_audio_lightning_research.md` — DSP, Hue protocol, perceptual science, architecture
 - `docs/ilightshow_research.md` — iLightShow teardown: pre-computed beats, palette system, effects
-
-## Backlog
-
-See `BACKLOG.md` for remaining items with references to research specs.
 
 ## Documentation
 
