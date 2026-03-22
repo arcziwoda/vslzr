@@ -24,7 +24,11 @@ jobs:
         run: brew install portaudio mbedtls@2
 
       - name: Install dependencies
-        run: uv sync
+        run: |
+          # mbedtls@2 is keg-only — set paths so python-mbedtls can compile
+          export CFLAGS="-I$(brew --prefix mbedtls@2)/include"
+          export LDFLAGS="-L$(brew --prefix mbedtls@2)/lib"
+          uv sync
 
       - name: Build .app with PyInstaller
         run: uv run pyinstaller hue_visualizer_macos.spec --clean
