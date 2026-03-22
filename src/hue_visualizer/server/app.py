@@ -77,6 +77,7 @@ class AudioPipeline:
     """
 
     def __init__(self, settings: Settings):
+        self._settings = settings
         self.capture = AudioCapture(
             sample_rate=settings.sample_rate,
             buffer_size=settings.buffer_size,
@@ -119,7 +120,34 @@ class AudioPipeline:
 
     def start(self):
         self.capture.start()
+        self._sync_sample_rate()
         logger.info("Audio pipeline started")
+
+    def _sync_sample_rate(self):
+        """Re-create analyzer/beat_detector if device sample rate differs from config."""
+        actual_rate = self.capture._device_rate
+        settings = self._settings
+        if actual_rate != settings.sample_rate:
+            logger.warning(
+                f"Device sample rate ({actual_rate} Hz) differs from config "
+                f"({settings.sample_rate} Hz) — re-initializing DSP components"
+            )
+            self.analyzer = AudioAnalyzer(
+                sample_rate=actual_rate,
+                fft_size=settings.fft_size,
+                bass_boost=settings.bass_boost_factor,
+                hop_size=settings.buffer_size,
+            )
+            self.beat_detector = BeatDetector(
+                sample_rate=actual_rate,
+                hop_size=settings.buffer_size,
+                cooldown_ms=settings.beat_cooldown_ms,
+                bpm_min=settings.bpm_min,
+                bpm_max=settings.bpm_max,
+            )
+            self.section_detector = SectionDetector(
+                sample_rate_hz=float(actual_rate) / settings.buffer_size,
+            )
 
     def stop(self):
         self.capture.stop()
@@ -1015,6 +1043,7 @@ def _handle_control(msg: dict):
             device_index = int(device_index)
         try:
             info = pipeline.capture.switch_device(device_index)
+            pipeline._sync_sample_rate()
             pipeline.reset_analysis()
             if device_index is not None:
                 save_audio_device_preference(device_index)

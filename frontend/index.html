@@ -1451,7 +1451,10 @@ function loadAudioDevices() {
       (data.devices || []).forEach(function(dev) {
         var opt = document.createElement('option');
         opt.value = dev.index;
-        opt.textContent = dev.name + ' (' + dev.channels + 'ch, ' + dev.sample_rate + 'Hz)';
+        var label = dev.name + ' (' + dev.channels + 'ch, ' + dev.sample_rate + 'Hz';
+        if (dev.host_api) label += ' \u2014 ' + dev.host_api;
+        label += ')';
+        opt.textContent = label;
         $sel.appendChild(opt);
       });
       if (data.current_device_index !== null && data.current_device_index !== undefined) {

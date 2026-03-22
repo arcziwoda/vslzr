@@ -214,15 +214,22 @@ class AudioCapture:
     def list_devices(self) -> list[dict]:
         """List available audio input devices."""
         pa = self._pa or pyaudio.PyAudio()
+        host_api_names = {}
+        for h in range(pa.get_host_api_count()):
+            ha_info = pa.get_host_api_info_by_index(h)
+            host_api_names[h] = ha_info.get("name", f"API {h}")
+
         devices = []
         for i in range(pa.get_device_count()):
             info = pa.get_device_info_by_index(i)
             if info.get("maxInputChannels", 0) > 0:
+                host_api = int(info.get("hostApi", 0))
                 devices.append({
                     "index": i,
                     "name": info["name"],
                     "channels": info["maxInputChannels"],
                     "sample_rate": int(info["defaultSampleRate"]),
+                    "host_api": host_api_names.get(host_api, f"API {host_api}"),
                 })
         if not self._pa:
             pa.terminate()
