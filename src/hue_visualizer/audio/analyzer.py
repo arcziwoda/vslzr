@@ -39,8 +39,12 @@ class AudioFeatures:
     spectral_flatness: float = 0.0  # 0=tonal, 1=noise-like
 
     # Amplitude
-    rms: float = 0.0  # Root mean square energy
+    rms: float = 0.0  # Root mean square energy (normalized 0-1)
+    rms_raw: float = 0.0  # Raw RMS before sliding-window normalization
     peak: float = 0.0  # Peak amplitude
+
+    # Per-band power sums before auto-gain normalization (truly unnormalized)
+    band_energies_unnorm: np.ndarray = field(default_factory=lambda: np.zeros(7))
 
     # Raw spectrum for visualization
     spectrum: np.ndarray = field(default_factory=lambda: np.zeros(0))
@@ -59,6 +63,11 @@ class AudioFeatures:
     def high_energy(self) -> float:
         """Combined presence + brilliance energy."""
         return float(np.mean(self.band_energies[5:7]))
+
+    @property
+    def bass_energy_raw(self) -> float:
+        """Combined sub-bass + bass from unnormalized band power sums."""
+        return float(self.band_energies_unnorm[0] + self.band_energies_unnorm[1]) / 2.0
 
 
 class AudioAnalyzer:
@@ -130,6 +139,7 @@ class AudioAnalyzer:
 
         # Amplitude features (from raw frame, before windowing)
         raw_rms = float(np.sqrt(np.mean(frame**2)))
+        features.rms_raw = raw_rms
         features.peak = float(np.max(np.abs(frame)))
 
         # Sliding-window RMS normalization (volume-independent)
@@ -180,6 +190,9 @@ class AudioAnalyzer:
             band_power = power[start:end]
             if len(band_power) > 0:
                 raw_energies[i] = np.sum(band_power)
+
+        # Store truly unnormalized band power sums (for section detection)
+        features.band_energies_unnorm = raw_energies.copy()
 
         # Auto-gain normalization per band (before bass boost so boost is visible)
         self._band_max = np.maximum(

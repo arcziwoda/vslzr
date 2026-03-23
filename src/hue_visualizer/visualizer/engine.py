@@ -605,7 +605,7 @@ class EffectEngine:
         self._section_intensity = section.intensity
 
         # Detect section transitions for one-shot effects
-        if section.section == Section.DROP and prev_section != Section.DROP:
+        if section.section == Section.DROP and prev_section not in (Section.DROP, Section.SUSTAIN):
             self._drop_flash_pending = True
 
         # --- 2. Update energy-based blend ratio ---
@@ -617,7 +617,7 @@ class EffectEngine:
         # --- Auto-strobe triggers (gated by _strobe_enabled) ---
         if self._strobe_enabled and not self._strobe_active:
             # Drop strobe: on transition to DROP, fire a long burst
-            if section.section == Section.DROP and prev_section != Section.DROP:
+            if section.section == Section.DROP and prev_section not in (Section.DROP, Section.SUSTAIN):
                 self.trigger_strobe_burst(self._strobe_drop_cycles)
                 self._drop_flash_pending = False  # Consumed by strobe
                 return self._tick_strobe(features, beat_info, dt, now, section_info)
@@ -810,7 +810,7 @@ class EffectEngine:
         # --- 6. Per-light: flash decay + EMA smoothing + safety ---
         # Section-modulated flash decay (faster during DROP for punchy feel)
         active_flash_tau = self._flash_tau
-        if section.section == Section.DROP:
+        if section.section in (Section.DROP, Section.SUSTAIN):
             active_flash_tau = max(0.08, self._flash_tau * 0.6)
 
         light_states = []
@@ -970,6 +970,9 @@ class EffectEngine:
         elif self._current_section == Section.DROP:
             # Moderately faster during drops
             return 1.0 + 0.5 * self._section_intensity
+        elif self._current_section == Section.SUSTAIN:
+            return 1.0 + 0.3 * self._section_intensity
+        # UNKNOWN, QUIET, NORMAL → no change
         return 1.0
 
     def _section_modulate_reactive_weight(
@@ -982,8 +985,8 @@ class EffectEngine:
         - BREAKDOWN: pull reactive weight down (generative ambient dominates)
         - NORMAL: no change
         """
-        if section.section == Section.DROP:
-            # During a drop, reactive weight is forced high.
+        if section.section in (Section.DROP, Section.SUSTAIN):
+            # During a drop/sustain, reactive weight is forced high.
             # Blend toward 1.0 based on intensity (smooth, not instant).
             return base_weight + (1.0 - base_weight) * section.intensity
 
@@ -1013,14 +1016,14 @@ class EffectEngine:
         - BREAKDOWN: dim to 20-40%, shift toward cool colors, reduce saturation (pastels)
         - NORMAL: no change
         """
-        if section.section == Section.NORMAL or section.intensity < 0.01:
+        if section.section in (Section.NORMAL, Section.UNKNOWN, Section.QUIET) or section.intensity < 0.01:
             return hsv_list
 
         result = []
         intensity = section.intensity
 
         for h, s, b in hsv_list:
-            if section.section == Section.DROP:
+            if section.section in (Section.DROP, Section.SUSTAIN):
                 # Boost brightness: min 70% during drop
                 b = b + (1.0 - b) * intensity * 0.5
                 # Boost saturation for vivid colors

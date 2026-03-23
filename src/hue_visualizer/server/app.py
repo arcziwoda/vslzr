@@ -214,6 +214,10 @@ class AudioPipeline:
                 centroid=self.features.spectral_centroid,
                 is_beat=self.beat_info.is_beat,
                 bpm=self.beat_info.bpm,
+                rms_raw=self.features.rms_raw,
+                spectral_flux=self.features.spectral_flux,
+                spectral_flatness=self.features.spectral_flatness,
+                band_energies=self.features.band_energies_unnorm,
             )
 
             # Update peak-hold buffer with per-frame maxima

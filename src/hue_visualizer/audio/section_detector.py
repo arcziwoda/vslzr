@@ -1,29 +1,38 @@
-"""Section detection — drop, buildup, breakdown, and normal classification.
+"""Section detection — real-time drop/buildup/breakdown classification.
 
-Tracks energy/centroid/onset density trends over sliding windows (8-32 beats)
-and classifies the current musical section. Designed to modulate the effect
-engine behavior so drops feel like drops and breakdowns feel like breakdowns.
+Five-layer architecture:
+1. Feature extraction (raw unnormalized values from AudioAnalyzer)
+2. Dual-timescale EMA tracking (short ~1s, long ~8s) → exertion ratios
+3. Six-signal weighted fusion → composite drop score
+4. Variance-adaptive thresholding (Patin C)
+5. Six-state machine with minimum dwell times
 
-Detection algorithms:
-- DROP:      Bass energy spike >3x running average after a period of low bass
-- BUILDUP:   Rising RMS + rising centroid + increasing onset density
-- BREAKDOWN: Near-zero bass, sustained mid-to-high frequencies
-- NORMAL:    Default state, current behavior
+Key insight: exertion ratios (short EMA / long EMA) are inherently
+gain-invariant. A kick lasting 50ms barely moves the 1s EMA, but a
+2-second bass return saturates it. This timescale separation is the
+foundation for distinguishing kicks from drops.
 """
+
+from __future__ import annotations
 
 import time
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 
+import numpy as np
+
 
 class Section(str, Enum):
     """Musical section classification."""
 
-    NORMAL = "normal"
-    DROP = "drop"
-    BUILDUP = "buildup"
-    BREAKDOWN = "breakdown"
+    UNKNOWN = "unknown"  # Cold start, EMAs seeding
+    QUIET = "quiet"  # Near-silence
+    NORMAL = "normal"  # Default state
+    BREAKDOWN = "breakdown"  # Low energy section
+    BUILDUP = "buildup"  # Rising energy toward drop
+    DROP = "drop"  # THE trigger state — strobe fires on entry
+    SUSTAIN = "sustain"  # Continuation after DROP
 
 
 @dataclass
@@ -31,85 +40,147 @@ class SectionInfo:
     """Section detection output for a single tick."""
 
     section: Section = Section.NORMAL
-    confidence: float = 0.0  # 0-1, how confident we are in this classification
-    intensity: float = 0.0  # 0-1, how strong the section effect should be
-    beats_in_section: int = 0  # How many beats we've been in this section
+    confidence: float = 0.0  # 0-1
+    intensity: float = 0.0  # 0-1, smoothed for effects
+    beats_in_section: int = 0
+    # Diagnostic fields (for analyze_track.py and tuning)
+    drop_score: float = 0.0  # Weighted fusion score
+    bass_exertion: float = 0.0  # Short/long bass ratio
+    rms_exertion: float = 0.0  # Short/long RMS ratio
+    adaptive_threshold: float = 0.0  # Current Patin C threshold
 
 
 class SectionDetector:
-    """Detects musical sections (drop, buildup, breakdown) from audio features.
-
-    Maintains sliding windows of bass energy, RMS, spectral centroid,
-    and onset count. Classifies the current section based on feature trends
-    over configurable beat-aligned windows.
+    """Detects musical sections from audio features using dual-timescale
+    EMA tracking, multi-signal fusion, and a six-state machine.
 
     Typical usage:
-        detector = SectionDetector()
+        detector = SectionDetector(sample_rate_hz=44100 / 1024)
         ...
-        info = detector.update(bass_energy, rms, centroid, is_beat, bpm)
-        # info.section tells you what to do in the effect engine
+        info = detector.update(
+            bass_energy=features.bass_energy,
+            rms=features.rms,
+            centroid=features.spectral_centroid,
+            is_beat=beat_info.is_beat,
+            bpm=beat_info.bpm,
+            rms_raw=features.rms_raw,
+            spectral_flux=features.spectral_flux,
+            spectral_flatness=features.spectral_flatness,
+            band_energies=features.band_energies_unnorm,
+        )
     """
 
-    def __init__(
-        self,
-        window_beats: int = 8,
-        drop_bass_multiplier: float = 3.0,
-        drop_duration_beats: int = 4,
-        buildup_min_beats: int = 4,
-        breakdown_bass_threshold: float = 0.3,
-        breakdown_min_beats: int = 4,
-        sample_rate_hz: float = 30.0,
-    ):
-        """Initialize section detector.
-
-        Args:
-            window_beats: Number of beats for the analysis window (default 8).
-            drop_bass_multiplier: Bass must exceed running avg by this factor for DROP.
-            drop_duration_beats: How many beats a DROP lasts before transitioning.
-            buildup_min_beats: Minimum beats of rising trend to trigger BUILDUP.
-            breakdown_bass_threshold: Bass must be below this fraction of avg for BREAKDOWN.
-            breakdown_min_beats: Minimum beats of low bass to trigger BREAKDOWN.
-            sample_rate_hz: How often update() is called (for time-based windows).
-        """
-        self._window_beats = max(4, window_beats)
-        self._drop_bass_multiplier = max(1.5, drop_bass_multiplier)
-        self._drop_duration_beats = max(1, drop_duration_beats)
-        self._buildup_min_beats = max(2, buildup_min_beats)
-        self._breakdown_bass_threshold = max(0.05, min(1.0, breakdown_bass_threshold))
-        self._breakdown_min_beats = max(2, breakdown_min_beats)
+    def __init__(self, sample_rate_hz: float = 43.07):
         self._sample_rate_hz = max(1.0, sample_rate_hz)
 
-        # --- Sliding windows (time-based, converted from beats at runtime) ---
-        # We store ~8 seconds of history at the sample rate, enough for
-        # any reasonable BPM. The actual beat-aligned analysis uses
-        # the BPM to determine how many samples correspond to N beats.
-        max_history = int(self._sample_rate_hz * 10)  # 10 seconds of history
-        self._bass_history: deque[float] = deque(maxlen=max_history)
-        self._rms_history: deque[float] = deque(maxlen=max_history)
-        self._centroid_history: deque[float] = deque(maxlen=max_history)
-        self._onset_history: deque[bool] = deque(maxlen=max_history)
+        # --- EMA alphas ---
+        self._alpha_short: float = 0.047  # ~1s time constant
+        self._alpha_long: float = 0.006  # ~8s time constant
+        self._alpha_fast: float = 0.087  # ~0.5s, slope tracking
+        self._alpha_drop_score: float = 0.15  # ~140ms smoothing
 
-        # Running average for bass (longer window for baseline comparison)
-        # 4 seconds at sample rate — used as "running average" for drop detection
-        long_window = int(self._sample_rate_hz * 4)
-        self._bass_long_history: deque[float] = deque(maxlen=max(long_window, 30))
+        # --- Patin C variance-adaptive threshold ---
+        self._patin_c_max: float = 1.55
+        self._patin_c_min: float = 1.0
+        self._base_threshold: float = 0.40
 
-        # --- Section state ---
-        self._current_section = Section.NORMAL
-        self._section_confidence: float = 0.0
-        self._section_intensity: float = 0.0
-        self._beats_in_section: int = 0
-        self._section_start_time: float = 0.0
+        # --- Drop entry conditions ---
+        self._emergency_override: float = 0.90
+        self._bass_exertion_min: float = 1.3
 
-        # Beat counting within sections
+        # --- Silence / pause ---
+        self._silence_threshold: float = 0.01  # raw RMS
+        self._pause_confirm_frames: int = 13  # ~300ms
+        self._resume_lockout_frames: int = 43  # ~1s
+
+        # --- Cold start ---
+        self._cold_start_lockout: int = 86  # ~2s
+        self._full_warmup: int = 344  # ~8s
+        self._warmup_threshold_mult: float = 1.3
+
+        # --- Song change ---
+        self._song_change_cosine_thresh: float = 0.6
+        self._song_change_confirm_sec: float = 2.0
+
+        # --- Signal weights ---
+        self._w_bass: float = 0.30
+        self._w_broadband: float = 0.25
+        self._w_centroid: float = 0.15
+        self._w_flux: float = 0.15
+        self._w_flatness: float = 0.10
+        self._w_buildup: float = 0.05
+
+        # --- Minimum dwell times (frames) ---
+        self._min_dwell: dict[Section, int] = {
+            Section.UNKNOWN: 86,
+            Section.QUIET: 22,
+            Section.BREAKDOWN: 43,
+            Section.BUILDUP: 22,
+            Section.DROP: 22,
+            Section.SUSTAIN: 43,
+            Section.NORMAL: 0,
+        }
+
+        # --- Initialize mutable state ---
+        self._init_state()
+
+    def _init_state(self) -> None:
+        """Initialize / reset all mutable state."""
+        # Dual-timescale EMAs
+        self._ema_short_bass: float = 0.0
+        self._ema_long_bass: float = 0.0
+        self._ema_short_rms: float = 0.0
+        self._ema_long_rms: float = 0.0
+        self._ema_short_centroid: float = 0.0
+        self._ema_long_centroid: float = 0.0
+        self._ema_long_flux: float = 0.0
+        self._ema_long_flatness: float = 0.0
+
+        # Slope tracking
+        self._prev_rms_raw: float = 0.0
+        self._energy_slope_ema: float = 0.0
+
+        # Drop scoring
+        self._drop_score: float = 0.0
+        self._drop_score_variance_ema: float = 0.0
+
+        # State machine
+        self._state: Section = Section.UNKNOWN
+        self._frames_in_state: int = 0
+        self._frame_count: int = 0
         self._total_beats: int = 0
+        self._beats_in_section: int = 0
 
-        # Drop state: track the pre-drop period
-        self._pre_drop_low_bass_samples: int = 0
+        # Pause / resume
+        self._silence_frames: int = 0
+        self._emas_frozen: bool = False
+        self._pause_start_frame: int = 0
+        self._resume_lockout_remaining: int = 0
 
-        # Smoothed section intensity for gradual transitions
+        # Song change detection
+        feature_window_size = int(self._sample_rate_hz * 4)  # 4s buffer
+        self._feature_window: deque[np.ndarray] = deque(maxlen=max(feature_window_size, 10))
+        self._prev_feature_avg: np.ndarray | None = None
+        self._song_change_frames: int = 0
+        self._song_change_threshold_boost: int = 0
+        self._prev_bpm: float = 0.0
+
+        # Buildup recency tracker (frames since we left BUILDUP)
+        self._frames_since_buildup: int = 999
+
+        # Smoothed output intensity
         self._smoothed_intensity: float = 0.0
-        self._intensity_alpha: float = 0.15
+        self._sustain_intensity: float = 0.0
+
+        # Seeding flag
+        self._seeded: bool = False
+
+        # Confidence
+        self._section_confidence: float = 0.0
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def update(
         self,
@@ -119,366 +190,529 @@ class SectionDetector:
         is_beat: bool,
         bpm: float,
         now: float | None = None,
+        *,
+        rms_raw: float = 0.0,
+        spectral_flux: float = 0.0,
+        spectral_flatness: float = 0.0,
+        band_energies: np.ndarray | None = None,
     ) -> SectionInfo:
-        """Process one tick of audio features and classify the current section.
-
-        Call this at the same rate as the effect engine tick (~25-30 Hz).
+        """Process one frame and classify the current musical section.
 
         Args:
-            bass_energy: Current bass energy (0-1 range, sub_bass + bass avg).
-            rms: Current RMS energy (0-1 normalized).
+            bass_energy: Normalized bass energy (kept for backward compat).
+            rms: Normalized RMS (kept for backward compat).
             centroid: Spectral centroid in Hz.
-            is_beat: Whether a beat was detected this tick.
+            is_beat: Whether a beat was detected this frame.
             bpm: Current estimated BPM (0 if unknown).
-            now: Current time (monotonic), defaults to time.monotonic().
-
-        Returns:
-            SectionInfo with current classification.
+            now: Current monotonic time.
+            rms_raw: Raw unnormalized RMS (critical for gain-invariant detection).
+            spectral_flux: Raw spectral flux.
+            spectral_flatness: Spectral flatness 0-1.
+            band_energies: 7-band unnormalized power sums (for bass EMA + song change).
         """
         if now is None:
             now = time.monotonic()
 
-        # --- Append to history buffers ---
-        self._bass_history.append(bass_energy)
-        self._rms_history.append(rms)
-        self._centroid_history.append(centroid)
-        self._onset_history.append(is_beat)
-        self._bass_long_history.append(bass_energy)
+        self._frame_count += 1
+        self._frames_in_state += 1
 
+        # Beat counting
         if is_beat:
             self._total_beats += 1
             self._beats_in_section += 1
 
-        # Need enough history before classifying
-        min_samples = int(self._sample_rate_hz * 1.5)
-        if len(self._bass_history) < min_samples:
-            return SectionInfo()
+        # Track buildup recency
+        if self._state != Section.BUILDUP:
+            self._frames_since_buildup += 1
 
-        # Convert beat window to sample count
-        beat_window_samples = self._beats_to_samples(
-            self._window_beats, bpm
-        )
-
-        # --- Run detection algorithms ---
-        # Priority: DROP > BUILDUP > BREAKDOWN > NORMAL
-        # (a drop can interrupt anything; buildup leads to drop)
-
-        drop_conf, drop_intensity = self._detect_drop(beat_window_samples)
-        buildup_conf, buildup_intensity = self._detect_buildup(beat_window_samples)
-        breakdown_conf, breakdown_intensity = self._detect_breakdown(beat_window_samples)
-
-        # --- State machine: transition logic ---
-        new_section = self._resolve_section(
-            drop_conf, drop_intensity,
-            buildup_conf, buildup_intensity,
-            breakdown_conf, breakdown_intensity,
-            now,
-            bpm,
-        )
-
-        # Handle section transitions
-        if new_section != self._current_section:
-            self._current_section = new_section
-            self._beats_in_section = 0
-            self._section_start_time = now
-
-        # Smooth intensity for gradual transitions
-        target_intensity = {
-            Section.DROP: drop_intensity,
-            Section.BUILDUP: buildup_intensity,
-            Section.BREAKDOWN: breakdown_intensity,
-            Section.NORMAL: 0.0,
-        }[self._current_section]
-
-        self._smoothed_intensity += self._intensity_alpha * (
-            target_intensity - self._smoothed_intensity
-        )
-
-        # Build output
-        return SectionInfo(
-            section=self._current_section,
-            confidence=self._section_confidence,
-            intensity=min(1.0, max(0.0, self._smoothed_intensity)),
-            beats_in_section=self._beats_in_section,
-        )
-
-    def _beats_to_samples(self, beats: int, bpm: float) -> int:
-        """Convert a number of beats to a number of samples at current BPM."""
-        if bpm <= 0:
-            # No BPM — fall back to ~4 seconds of samples
-            return int(self._sample_rate_hz * 4)
-        beat_duration_sec = 60.0 / bpm
-        total_sec = beats * beat_duration_sec
-        return max(10, int(total_sec * self._sample_rate_hz))
-
-    def _detect_drop(self, window_samples: int) -> tuple[float, float]:
-        """Detect a drop: bass spike after a period of low bass.
-
-        Returns (confidence, intensity) both in 0-1.
-        """
-        if len(self._bass_long_history) < 20:
-            return 0.0, 0.0
-
-        # Running average bass over the long window (4 seconds)
-        bass_long_avg = sum(self._bass_long_history) / len(self._bass_long_history)
-        if bass_long_avg < 0.001:
-            return 0.0, 0.0
-
-        # Current bass: average over last ~100ms (3-4 samples at 30Hz)
-        recent_n = max(1, int(self._sample_rate_hz * 0.1))
-        recent_bass_list = list(self._bass_history)[-recent_n:]
-        current_bass = sum(recent_bass_list) / len(recent_bass_list)
-
-        # Check the pre-drop condition: was bass below average recently?
-        # Look at the 2 seconds BEFORE the most recent 100ms
-        pre_drop_n = int(self._sample_rate_hz * 2.0)
-        bass_list = list(self._bass_history)
-        if len(bass_list) < pre_drop_n + recent_n:
-            pre_drop_segment = bass_list[:-recent_n] if recent_n < len(bass_list) else bass_list
+        # Compute raw bass from band_energies if available
+        if band_energies is not None and len(band_energies) >= 2:
+            bass_raw = float(band_energies[0] + band_energies[1]) / 2.0
         else:
-            pre_drop_segment = bass_list[-(pre_drop_n + recent_n):-recent_n]
+            # Fallback: use rms_raw as bass proxy (degraded mode)
+            bass_raw = rms_raw
 
-        if not pre_drop_segment:
-            return 0.0, 0.0
+        # --- 1. Pause detection ---
+        if self._check_pause(rms_raw):
+            return self._make_output()
 
-        pre_drop_avg = sum(pre_drop_segment) / len(pre_drop_segment)
-        pre_drop_was_low = pre_drop_avg < bass_long_avg * 0.8
+        # --- 2. Resume lockout ---
+        if self._resume_lockout_remaining > 0:
+            self._resume_lockout_remaining -= 1
+            return self._make_output()
 
-        # Drop condition: current bass is N times the running average
-        bass_ratio = current_bass / (bass_long_avg + 1e-6)
-        is_spike = bass_ratio >= self._drop_bass_multiplier
+        # --- 3. Seed EMAs on first real signal ---
+        if not self._seeded:
+            if rms_raw > self._silence_threshold:
+                self._seed_emas(bass_raw, rms_raw, centroid, spectral_flux, spectral_flatness)
+            return self._make_output()
 
-        if is_spike and pre_drop_was_low:
-            # Strong drop: bass ratio indicates how dramatic the transition is
-            confidence = min(1.0, (bass_ratio - self._drop_bass_multiplier) / 2.0 + 0.7)
-            intensity = min(1.0, bass_ratio / (self._drop_bass_multiplier + 2.0))
-            return confidence, intensity
+        # --- 4. Update EMAs ---
+        self._update_emas(bass_raw, rms_raw, centroid, spectral_flux, spectral_flatness)
 
-        # Weaker drop: just a bass spike without clear pre-drop quiet
-        if is_spike:
-            confidence = min(1.0, (bass_ratio - self._drop_bass_multiplier) / 3.0 + 0.3)
-            intensity = min(1.0, bass_ratio / (self._drop_bass_multiplier + 3.0))
-            return confidence, intensity
+        # --- 5. Energy slope ---
+        self._compute_energy_slope(rms_raw)
 
-        return 0.0, 0.0
+        # --- 6. Exertion ratios ---
+        bass_exertion, rms_exertion, centroid_ratio = self._compute_exertion_ratios()
 
-    def _detect_buildup(self, window_samples: int) -> tuple[float, float]:
-        """Detect a buildup: rising RMS + rising centroid + increasing onset density.
+        # --- 7. Drop score (6-signal fusion) ---
+        drop_score = self._compute_drop_score(
+            bass_exertion, rms_exertion, centroid_ratio,
+            spectral_flux, spectral_flatness,
+        )
 
-        A buildup requires RISING bass/RMS energy. If bass is very low compared
-        to the running average, this is a breakdown, not a buildup — even if
-        centroid is rising (which is a breakdown characteristic).
+        # --- 8. Adaptive threshold ---
+        threshold = self._compute_adaptive_threshold()
 
-        Returns (confidence, intensity) both in 0-1.
-        """
-        # We need at least a half-window of data to compute trends
-        analysis_len = min(window_samples, len(self._rms_history))
-        if analysis_len < 10:
-            return 0.0, 0.0
+        # --- 9. Song change detection ---
+        self._check_song_change(band_energies, centroid, spectral_flatness, bpm)
 
-        # Reject buildup when bass is very low — that's a breakdown, not a buildup.
-        # A buildup should have increasing energy including bass.
-        if len(self._bass_long_history) >= 20:
-            bass_long_avg = sum(self._bass_long_history) / len(self._bass_long_history)
-            if bass_long_avg > 0.01:
-                recent_n = max(1, int(self._sample_rate_hz * 0.5))
-                recent_bass = list(self._bass_history)[-recent_n:]
-                recent_bass_avg = sum(recent_bass) / max(len(recent_bass), 1)
-                if recent_bass_avg < bass_long_avg * self._breakdown_bass_threshold:
-                    return 0.0, 0.0
+        # --- 10. State machine ---
+        new_state = self._transition_state(
+            drop_score, threshold,
+            bass_exertion, rms_exertion, centroid_ratio,
+            rms_raw,
+        )
 
-        # Get the analysis window
-        rms_window = list(self._rms_history)[-analysis_len:]
-        centroid_window = list(self._centroid_history)[-analysis_len:]
-        onset_window = list(self._onset_history)[-analysis_len:]
+        # Handle state transition
+        if new_state != self._state:
+            # Track buildup recency on exit
+            if self._state == Section.BUILDUP:
+                self._frames_since_buildup = 0
+            # Capture intensity at DROP for SUSTAIN decay
+            if new_state == Section.DROP:
+                self._sustain_intensity = max(0.5, min(1.0, drop_score * 2.0))
+            self._state = new_state
+            self._frames_in_state = 0
+            self._beats_in_section = 0
 
-        # Compute trends: split window into first half and second half
-        half = analysis_len // 2
+        # --- 11. Compute output intensity ---
+        self._update_intensity(rms_exertion, drop_score)
 
-        rms_first = sum(rms_window[:half]) / max(half, 1)
-        rms_second = sum(rms_window[half:]) / max(analysis_len - half, 1)
-        rms_rising = rms_second > rms_first * 1.1  # 10% increase
-
-        centroid_first = sum(centroid_window[:half]) / max(half, 1)
-        centroid_second = sum(centroid_window[half:]) / max(analysis_len - half, 1)
-        centroid_rising = centroid_second > centroid_first * 1.05  # 5% increase
-
-        onset_first = sum(1 for x in onset_window[:half] if x)
-        onset_second = sum(1 for x in onset_window[half:] if x)
-        onset_rising = onset_second >= onset_first  # At least as many onsets
-
-        # Count how many indicators are positive
-        indicators = [rms_rising, centroid_rising, onset_rising]
-        positive_count = sum(indicators)
-
-        if positive_count >= 2:
-            # At least 2 of 3 indicators rising
-            # Confidence based on how strong the trends are
-            rms_ratio = (rms_second / max(rms_first, 0.001)) - 1.0  # how much RMS grew
-            centroid_ratio = (centroid_second / max(centroid_first, 1.0)) - 1.0
-
-            confidence = min(1.0, 0.3 + positive_count * 0.2 + rms_ratio * 0.5)
-            confidence = max(0.0, confidence)
-
-            intensity = min(1.0, rms_ratio * 2.0 + centroid_ratio * 0.5)
-            intensity = max(0.0, min(1.0, intensity))
-
-            return confidence, intensity
-
-        return 0.0, 0.0
-
-    def _detect_breakdown(self, window_samples: int) -> tuple[float, float]:
-        """Detect a breakdown: low bass energy with sustained mid/high.
-
-        Uses a shorter "recent" window (~1.5 seconds) for the bass check rather
-        than the full analysis window, because the analysis window can span the
-        transition from normal to breakdown and dilute the signal.
-
-        Returns (confidence, intensity) both in 0-1.
-        """
-        if len(self._bass_long_history) < 20:
-            return 0.0, 0.0
-
-        # Running average bass over the full long window
-        bass_long_avg = sum(self._bass_long_history) / len(self._bass_long_history)
-        if bass_long_avg < 0.001:
-            # If overall bass has always been near zero, can't detect a breakdown
-            return 0.0, 0.0
-
-        # Check recent bass: use a SHORT window (~1.5 seconds) so the check
-        # isn't diluted by old high-bass samples from before the breakdown.
-        recent_len = max(10, int(self._sample_rate_hz * 1.5))
-        recent_len = min(recent_len, len(self._bass_history))
-        recent_bass = list(self._bass_history)[-recent_len:]
-        recent_bass_avg = sum(recent_bass) / len(recent_bass)
-
-        # Bass is low relative to running average
-        bass_ratio = recent_bass_avg / (bass_long_avg + 1e-6)
-        bass_is_low = bass_ratio < self._breakdown_bass_threshold
-
-        # But we still have some audio activity (not silence)
-        recent_rms = list(self._rms_history)[-recent_len:]
-        recent_rms_avg = sum(recent_rms) / len(recent_rms)
-        has_activity = recent_rms_avg > 0.05  # Not silence
-
-        # Check that the low bass period is sustained (not just a brief dip)
-        # Use at least 1 second of data for the sustained check
-        sustained_len = max(10, int(self._sample_rate_hz * 1.0))
-        sustained_len = min(sustained_len, len(self._bass_history))
-        sustained_bass = list(self._bass_history)[-sustained_len:]
-        sustained_avg = sum(sustained_bass) / max(len(sustained_bass), 1)
-        sustained_low = sustained_avg / (bass_long_avg + 1e-6) < self._breakdown_bass_threshold
-
-        if bass_is_low and has_activity and sustained_low:
-            # How dramatically bass has dropped
-            drop_ratio = 1.0 - bass_ratio
-            confidence = min(1.0, 0.5 + drop_ratio * 0.5)
-            intensity = min(1.0, drop_ratio)
-            return confidence, intensity
-
-        return 0.0, 0.0
-
-    def _resolve_section(
-        self,
-        drop_conf: float, drop_intensity: float,
-        buildup_conf: float, buildup_intensity: float,
-        breakdown_conf: float, breakdown_intensity: float,
-        now: float,
-        bpm: float,
-    ) -> Section:
-        """Resolve which section we're in based on detection confidences.
-
-        Implements a simple state machine with hysteresis to prevent rapid
-        section switching.
-        """
-        current = self._current_section
-
-        # --- DROP ---
-        # A drop can happen from any state (it's an event, not a sustained state)
-        if drop_conf >= 0.5:
-            self._section_confidence = drop_conf
-            return Section.DROP
-
-        # If we're in DROP, check if it should expire
-        if current == Section.DROP:
-            # Drops last a fixed number of beats then transition back
-            drop_duration_samples = self._beats_to_samples(
-                self._drop_duration_beats, bpm
-            )
-            time_in_section = now - self._section_start_time
-            max_duration = drop_duration_samples / max(self._sample_rate_hz, 1.0)
-            if time_in_section > max_duration:
-                # Drop expired — transition based on what's happening now
-                if breakdown_conf >= 0.4:
-                    self._section_confidence = breakdown_conf
-                    return Section.BREAKDOWN
-                self._section_confidence = 0.0
-                return Section.NORMAL
-            # Still in drop
-            self._section_confidence = drop_conf if drop_conf > 0 else self._section_confidence * 0.95
-            return Section.DROP
-
-        # --- BREAKDOWN ---
-        # Check breakdown BEFORE buildup: low bass with mid/high activity is
-        # unambiguous. A false "buildup" with no bass is really a breakdown.
-        if breakdown_conf >= 0.5:
-            self._section_confidence = breakdown_conf
-            return Section.BREAKDOWN
-
-        # If we're in BREAKDOWN and confidence drops, exit
-        if current == Section.BREAKDOWN and breakdown_conf < 0.3:
-            # Check if we're transitioning to a buildup
-            if buildup_conf >= 0.3:
-                self._section_confidence = buildup_conf
-                return Section.BUILDUP
-            self._section_confidence = 0.0
-            return Section.NORMAL
-
-        if current == Section.BREAKDOWN:
-            self._section_confidence = breakdown_conf
-            return Section.BREAKDOWN
-
-        # --- BUILDUP ---
-        if buildup_conf >= 0.5:
-            self._section_confidence = buildup_conf
-            return Section.BUILDUP
-
-        # If we're in BUILDUP and confidence drops, exit to NORMAL
-        if current == Section.BUILDUP and buildup_conf < 0.3:
-            self._section_confidence = 0.0
-            return Section.NORMAL
-
-        if current == Section.BUILDUP:
-            # Still building
-            self._section_confidence = buildup_conf
-            return Section.BUILDUP
-
-        # --- NORMAL ---
-        self._section_confidence = 0.0
-        return Section.NORMAL
+        # --- 12. Build output ---
+        self._section_confidence = min(1.0, drop_score / max(threshold, 0.01))
+        return SectionInfo(
+            section=self._state,
+            confidence=self._section_confidence,
+            intensity=self._smoothed_intensity,
+            beats_in_section=self._beats_in_section,
+            drop_score=self._drop_score,
+            bass_exertion=bass_exertion,
+            rms_exertion=rms_exertion,
+            adaptive_threshold=threshold,
+        )
 
     def reset(self) -> None:
-        """Reset all state."""
-        self._bass_history.clear()
-        self._rms_history.clear()
-        self._centroid_history.clear()
-        self._onset_history.clear()
-        self._bass_long_history.clear()
-        self._current_section = Section.NORMAL
-        self._section_confidence = 0.0
-        self._section_intensity = 0.0
-        self._beats_in_section = 0
-        self._section_start_time = 0.0
-        self._total_beats = 0
-        self._pre_drop_low_bass_samples = 0
-        self._smoothed_intensity = 0.0
+        """Reset all state (cold restart)."""
+        self._init_state()
 
     @property
     def current_section(self) -> Section:
         """Current detected section."""
-        return self._current_section
+        return self._state
 
     @property
     def beats_in_section(self) -> int:
         """Number of beats since the current section started."""
         return self._beats_in_section
+
+    # ------------------------------------------------------------------
+    # Layer 2: Dual-timescale EMA
+    # ------------------------------------------------------------------
+
+    def _seed_emas(
+        self,
+        bass_raw: float,
+        rms_raw: float,
+        centroid: float,
+        flux: float,
+        flatness: float,
+    ) -> None:
+        """Seed all EMAs with first frame values. Called once."""
+        self._ema_short_bass = self._ema_long_bass = bass_raw
+        self._ema_short_rms = self._ema_long_rms = rms_raw
+        self._ema_short_centroid = self._ema_long_centroid = centroid
+        self._ema_long_flux = max(flux, 1e-6)  # Avoid zero division
+        self._ema_long_flatness = flatness
+        self._prev_rms_raw = rms_raw
+        self._seeded = True
+
+    def _update_emas(
+        self,
+        bass_raw: float,
+        rms_raw: float,
+        centroid: float,
+        flux: float,
+        flatness: float,
+    ) -> None:
+        """Advance all dual-timescale EMAs. Skipped when frozen."""
+        if self._emas_frozen:
+            return
+
+        a_s = self._alpha_short
+        a_l = self._alpha_long
+
+        # Bass: separate from broadband (sub_bass + bass power sum)
+        self._ema_short_bass += a_s * (bass_raw - self._ema_short_bass)
+        self._ema_long_bass += a_l * (bass_raw - self._ema_long_bass)
+
+        # Broadband RMS
+        self._ema_short_rms += a_s * (rms_raw - self._ema_short_rms)
+        self._ema_long_rms += a_l * (rms_raw - self._ema_long_rms)
+
+        # Spectral centroid
+        self._ema_short_centroid += a_s * (centroid - self._ema_short_centroid)
+        self._ema_long_centroid += a_l * (centroid - self._ema_long_centroid)
+
+        # Flux and flatness (long-term only — used as reference baselines)
+        self._ema_long_flux += a_l * (flux - self._ema_long_flux)
+        self._ema_long_flatness += a_l * (flatness - self._ema_long_flatness)
+
+    def _compute_energy_slope(self, rms_raw: float) -> None:
+        """Compute fast EMA of frame-to-frame RMS delta (energy slope)."""
+        delta = rms_raw - self._prev_rms_raw
+        self._energy_slope_ema += self._alpha_fast * (delta - self._energy_slope_ema)
+        self._prev_rms_raw = rms_raw
+
+    def _compute_exertion_ratios(self) -> tuple[float, float, float]:
+        """Compute short/long ratios for bass, RMS, and centroid.
+
+        Returns:
+            (bass_exertion, rms_exertion, centroid_ratio)
+            All ≥ 0. A value of 1.0 means "at section average."
+        """
+        bass_ex = self._ema_short_bass / max(self._ema_long_bass, 1e-10)
+        rms_ex = self._ema_short_rms / max(self._ema_long_rms, 1e-10)
+        centroid_r = self._ema_short_centroid / max(self._ema_long_centroid, 1e-6)
+        return bass_ex, rms_ex, centroid_r
+
+    # ------------------------------------------------------------------
+    # Layer 3: Six-signal weighted fusion
+    # ------------------------------------------------------------------
+
+    def _compute_drop_score(
+        self,
+        bass_ex: float,
+        rms_ex: float,
+        centroid_ratio: float,
+        flux: float,
+        flatness: float,
+    ) -> float:
+        """Compute composite drop score from six normalized signals."""
+        # Individual signals, each clipped to [0, 1]
+        bass_signal = _clip01((bass_ex - 1.0) / 2.0)
+        energy_signal = _clip01((rms_ex - 1.0) / 1.5)
+        centroid_signal = _clip01((1.0 - centroid_ratio) / 0.3)
+        flux_signal = _clip01(
+            (flux / max(self._ema_long_flux, 1e-6) - 2.0) / 3.0
+        )
+        flatness_signal = _clip01(1.0 - flatness * 5.0)
+
+        # Buildup context bonus: full credit if in BUILDUP, partial if recent
+        if self._state == Section.BUILDUP:
+            buildup_bonus = 1.0
+        elif self._frames_since_buildup < int(self._sample_rate_hz):
+            # Decaying bonus within 1s of leaving BUILDUP
+            buildup_bonus = 1.0 - self._frames_since_buildup / self._sample_rate_hz
+        else:
+            buildup_bonus = 0.0
+
+        raw_score = (
+            self._w_bass * bass_signal
+            + self._w_broadband * energy_signal
+            + self._w_centroid * centroid_signal
+            + self._w_flux * flux_signal
+            + self._w_flatness * flatness_signal
+            + self._w_buildup * buildup_bonus
+        )
+
+        # Smooth with EMA
+        self._drop_score += self._alpha_drop_score * (raw_score - self._drop_score)
+
+        # Update variance for Patin C (after smoothing so variance tracks score stability)
+        delta = raw_score - self._drop_score
+        self._drop_score_variance_ema += 0.01 * (
+            delta * delta - self._drop_score_variance_ema
+        )
+
+        return self._drop_score
+
+    # ------------------------------------------------------------------
+    # Layer 4: Variance-adaptive threshold (Patin C)
+    # ------------------------------------------------------------------
+
+    def _compute_adaptive_threshold(self) -> float:
+        """Compute drop threshold using Patin's variance-adaptive C."""
+        variance = self._drop_score_variance_ema
+        c_range = self._patin_c_max - self._patin_c_min
+        c = self._patin_c_max - (variance / 0.02) * c_range
+        c = max(self._patin_c_min, min(self._patin_c_max, c))
+        threshold = self._base_threshold / c
+
+        # Warmup: elevated threshold during first ~8s
+        if self._frame_count < self._full_warmup:
+            threshold *= self._warmup_threshold_mult
+
+        # Song change: elevated threshold for 4s after detection
+        if self._song_change_threshold_boost > 0:
+            threshold *= 1.5
+            self._song_change_threshold_boost -= 1
+
+        return threshold
+
+    # ------------------------------------------------------------------
+    # Layer 5: Six-state machine
+    # ------------------------------------------------------------------
+
+    def _transition_state(
+        self,
+        drop_score: float,
+        threshold: float,
+        bass_ex: float,
+        rms_ex: float,
+        centroid_ratio: float,
+        rms_raw: float,
+    ) -> Section:
+        """Determine next state based on current signals and dwell time."""
+        state = self._state
+
+        # Enforce minimum dwell time
+        if self._frames_in_state < self._min_dwell.get(state, 0):
+            return state
+
+        # UNKNOWN → NORMAL after cold start lockout
+        if state == Section.UNKNOWN:
+            if self._frame_count >= self._cold_start_lockout and self._seeded:
+                return Section.NORMAL
+            return Section.UNKNOWN
+
+        # Any → QUIET on near-silence
+        if rms_raw < self._silence_threshold * 2:
+            if state != Section.QUIET:
+                return Section.QUIET
+            return Section.QUIET
+
+        # QUIET → NORMAL when audio returns
+        if state == Section.QUIET:
+            if rms_raw >= self._silence_threshold * 2:
+                return Section.NORMAL
+            return Section.QUIET
+
+        # Emergency override: any non-UNKNOWN/DROP → DROP
+        if (
+            state not in (Section.UNKNOWN, Section.DROP)
+            and drop_score > self._emergency_override
+            and bass_ex > 2.0
+            and rms_ex > 1.8
+        ):
+            return Section.DROP
+
+        # Normal DROP entry (not from DROP or SUSTAIN)
+        if (
+            state not in (Section.DROP, Section.SUSTAIN, Section.UNKNOWN)
+            and drop_score > threshold
+            and bass_ex > self._bass_exertion_min
+        ):
+            return Section.DROP
+
+        # State-specific transitions
+        if state == Section.NORMAL:
+            if rms_ex < 0.7:
+                return Section.BREAKDOWN
+            return Section.NORMAL
+
+        if state == Section.BREAKDOWN:
+            if self._energy_slope_ema > 0.001 and centroid_ratio > 1.05:
+                return Section.BUILDUP
+            if rms_ex > 0.9:
+                return Section.NORMAL
+            return Section.BREAKDOWN
+
+        if state == Section.BUILDUP:
+            if rms_ex < 0.7:
+                return Section.BREAKDOWN
+            if self._energy_slope_ema < -0.001:
+                return Section.NORMAL
+            return Section.BUILDUP
+
+        if state == Section.DROP:
+            # After dwell, always transition to SUSTAIN
+            return Section.SUSTAIN
+
+        if state == Section.SUSTAIN:
+            if rms_ex < 0.7:
+                return Section.BREAKDOWN
+            if drop_score < threshold * 0.5:
+                return Section.NORMAL
+            # Re-trigger DROP on new spike from SUSTAIN
+            if drop_score > threshold and bass_ex > self._bass_exertion_min:
+                return Section.DROP
+            return Section.SUSTAIN
+
+        return state
+
+    # ------------------------------------------------------------------
+    # Operational edge cases
+    # ------------------------------------------------------------------
+
+    def _check_pause(self, rms_raw: float) -> bool:
+        """Detect pause (silence) and freeze EMAs. Returns True if paused."""
+        if rms_raw < self._silence_threshold:
+            self._silence_frames += 1
+        else:
+            if self._emas_frozen:
+                self._handle_resume()
+            self._silence_frames = 0
+            return False
+
+        if self._silence_frames >= self._pause_confirm_frames and not self._emas_frozen:
+            self._emas_frozen = True
+            self._pause_start_frame = self._frame_count
+
+        return self._emas_frozen
+
+    def _handle_resume(self) -> None:
+        """Handle resume from pause — re-seed or full reset."""
+        pause_duration_frames = self._frame_count - self._pause_start_frame
+        self._emas_frozen = False
+        self._silence_frames = 0
+
+        if pause_duration_frames > 5 * self._sample_rate_hz:
+            # Long pause (>5s): full reset
+            self._seeded = False
+            self._state = Section.UNKNOWN
+            self._frames_in_state = 0
+            self._frame_count = 0
+            self._drop_score = 0.0
+            self._drop_score_variance_ema = 0.0
+            self._energy_slope_ema = 0.0
+            self._smoothed_intensity = 0.0
+            self._sustain_intensity = 0.0
+        else:
+            # Short pause: re-seed short EMAs from long (preserve song context)
+            self._ema_short_bass = self._ema_long_bass
+            self._ema_short_rms = self._ema_long_rms
+            self._ema_short_centroid = self._ema_long_centroid
+
+        self._resume_lockout_remaining = self._resume_lockout_frames
+
+    def _check_song_change(
+        self,
+        band_energies: np.ndarray | None,
+        centroid: float,
+        flatness: float,
+        bpm: float,
+    ) -> None:
+        """Detect song changes via spectral similarity and BPM shift."""
+        if band_energies is None or len(band_energies) < 7:
+            return
+
+        # Build 9-element feature vector
+        centroid_norm = centroid / 10000.0
+        feature_vec = np.zeros(9)
+        feature_vec[:7] = band_energies[:7]
+        feature_vec[7] = centroid_norm
+        feature_vec[8] = flatness
+        self._feature_window.append(feature_vec)
+
+        # Need 2 seconds of data
+        window_size = int(self._sample_rate_hz * 2.0)
+        if len(self._feature_window) < window_size:
+            return
+
+        # Compute current window average
+        window_list = list(self._feature_window)[-window_size:]
+        current_avg = np.mean(window_list, axis=0)
+
+        if self._prev_feature_avg is not None:
+            # Cosine similarity
+            dot = float(np.dot(current_avg, self._prev_feature_avg))
+            norm_a = float(np.linalg.norm(current_avg))
+            norm_b = float(np.linalg.norm(self._prev_feature_avg))
+            if norm_a > 1e-10 and norm_b > 1e-10:
+                similarity = dot / (norm_a * norm_b)
+            else:
+                similarity = 1.0
+
+            # BPM change check
+            bpm_changed = (
+                self._prev_bpm > 0
+                and bpm > 0
+                and abs(bpm - self._prev_bpm) / self._prev_bpm > 0.05
+            )
+
+            if similarity < self._song_change_cosine_thresh or bpm_changed:
+                self._song_change_frames += 1
+            else:
+                self._song_change_frames = 0
+
+            # Confirmed song change
+            confirm_frames = int(self._song_change_confirm_sec * self._sample_rate_hz)
+            if self._song_change_frames >= confirm_frames:
+                # Decay long EMAs (retain 20%)
+                self._ema_long_bass *= 0.2
+                self._ema_long_rms *= 0.2
+                self._ema_long_centroid *= 0.2
+                self._ema_long_flux *= 0.2
+                self._ema_long_flatness *= 0.2
+                # Elevate threshold for 4 seconds
+                self._song_change_threshold_boost = int(4.0 * self._sample_rate_hz)
+                self._song_change_frames = 0
+
+        self._prev_feature_avg = current_avg.copy()
+        # Only update reference BPM when NOT accumulating song change evidence
+        # (otherwise, _prev_bpm races to match current bpm on each frame)
+        if self._song_change_frames == 0:
+            self._prev_bpm = bpm
+
+    # ------------------------------------------------------------------
+    # Output
+    # ------------------------------------------------------------------
+
+    def _update_intensity(self, rms_exertion: float, drop_score: float) -> None:
+        """Compute smoothed intensity from current state."""
+        # Target intensity per state
+        if self._state in (Section.UNKNOWN, Section.QUIET, Section.NORMAL):
+            target = 0.0
+        elif self._state == Section.BREAKDOWN:
+            target = _clip01(1.0 - rms_exertion)
+        elif self._state == Section.BUILDUP:
+            target = _clip01(self._energy_slope_ema * 100.0)
+        elif self._state == Section.DROP:
+            target = _clip01(drop_score * 2.0)
+        elif self._state == Section.SUSTAIN:
+            self._sustain_intensity *= 0.98
+            target = self._sustain_intensity
+        else:
+            target = 0.0
+
+        # Asymmetric EMA: fast attack, slow release
+        if target > self._smoothed_intensity:
+            alpha = 0.3
+        else:
+            alpha = 0.05
+        self._smoothed_intensity += alpha * (target - self._smoothed_intensity)
+        self._smoothed_intensity = _clip01(self._smoothed_intensity)
+
+    def _make_output(self) -> SectionInfo:
+        """Build SectionInfo for early-return paths (pause, lockout, unseeded)."""
+        return SectionInfo(
+            section=self._state,
+            confidence=self._section_confidence,
+            intensity=self._smoothed_intensity,
+            beats_in_section=self._beats_in_section,
+            drop_score=self._drop_score,
+            bass_exertion=0.0,
+            rms_exertion=0.0,
+            adaptive_threshold=0.0,
+        )
+
+
+def _clip01(x: float) -> float:
+    """Clip value to [0, 1]."""
+    if x < 0.0:
+        return 0.0
+    if x > 1.0:
+        return 1.0
+    return x
