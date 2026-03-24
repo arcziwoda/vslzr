@@ -5,7 +5,6 @@ import warnings
 
 import requests
 import urllib3
-from typing import Optional
 
 from ..core.exceptions import BridgeDiscoveryError, BridgeConnectionError
 
@@ -196,28 +195,30 @@ def list_entertainment_areas(
     Raises:
         BridgeConnectionError: If the request fails
     """
-    url = f"https://{bridge_ip}/api/{username}/groups"
+    url = f"https://{bridge_ip}/clip/v2/resource/entertainment_configuration"
+    headers = {
+        "hue-application-key": username,
+    }
 
     try:
-        response = requests.get(url, timeout=5, verify=False)
+        response = requests.get(url, headers=headers, timeout=5, verify=False)
         response.raise_for_status()
         data = response.json()
 
-        if isinstance(data, list) and len(data) > 0 and "error" in data[0]:
-            raise BridgeConnectionError(
-                f"Failed to list groups: {data[0]['error'].get('description')}"
-            )
-
-        if not isinstance(data, dict):
+        items = data.get("data", [])
+        if not isinstance(items, list):
             return {}
 
         areas: dict[str, dict] = {}
-        for group_id, group in data.items():
-            if group.get("type") == "Entertainment":
-                areas[group_id] = {
-                    "name": group.get("name", f"Area {group_id}"),
-                    "num_lights": len(group.get("lights", [])),
-                }
+        for item in items:
+            area_id = item.get("id", "")
+            metadata = item.get("metadata", {})
+            name = metadata.get("name", f"Area {area_id[:8]}")
+            num_lights = len(item.get("channels", []))
+            areas[area_id] = {
+                "name": name,
+                "num_lights": num_lights,
+            }
 
         return areas
 

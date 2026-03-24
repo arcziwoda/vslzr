@@ -198,45 +198,39 @@ class TestListEntertainmentAreas:
     """Test listing entertainment areas."""
 
     @patch("hue_visualizer.bridge.discovery.requests.get")
-    def test_returns_entertainment_groups_only(self, mock_get):
+    def test_returns_all_entertainment_configs(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
-            "1": {
-                "name": "Living Room",
-                "type": "Entertainment",
-                "lights": ["1", "2", "3"],
-            },
-            "2": {
-                "name": "Kitchen",
-                "type": "Room",
-                "lights": ["4", "5"],
-            },
-            "3": {
-                "name": "Studio",
-                "type": "Entertainment",
-                "lights": ["6", "7", "8", "9"],
-            },
+            "data": [
+                {
+                    "id": "uuid-living-room",
+                    "metadata": {"name": "Living Room"},
+                    "channels": [{"id": 0}, {"id": 1}, {"id": 2}],
+                },
+                {
+                    "id": "uuid-studio",
+                    "metadata": {"name": "Studio"},
+                    "channels": [{"id": 0}, {"id": 1}, {"id": 2}, {"id": 3}],
+                },
+            ]
         }
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
         areas = list_entertainment_areas("192.168.1.1", "user1")
 
-        assert "1" in areas
-        assert "3" in areas
-        assert "2" not in areas
+        assert "uuid-living-room" in areas
+        assert "uuid-studio" in areas
 
-        assert areas["1"]["name"] == "Living Room"
-        assert areas["1"]["num_lights"] == 3
-        assert areas["3"]["name"] == "Studio"
-        assert areas["3"]["num_lights"] == 4
+        assert areas["uuid-living-room"]["name"] == "Living Room"
+        assert areas["uuid-living-room"]["num_lights"] == 3
+        assert areas["uuid-studio"]["name"] == "Studio"
+        assert areas["uuid-studio"]["num_lights"] == 4
 
     @patch("hue_visualizer.bridge.discovery.requests.get")
     def test_returns_empty_dict_when_no_entertainment_areas(self, mock_get):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "1": {"name": "Kitchen", "type": "Room", "lights": ["1"]},
-        }
+        mock_resp.json.return_value = {"data": []}
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
@@ -244,27 +238,27 @@ class TestListEntertainmentAreas:
         assert areas == {}
 
     @patch("hue_visualizer.bridge.discovery.requests.get")
-    def test_uses_https(self, mock_get):
+    def test_uses_v2_api_url(self, mock_get):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {}
+        mock_resp.json.return_value = {"data": []}
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
         list_entertainment_areas("10.0.0.1", "u")
         url = mock_get.call_args[0][0]
         assert url.startswith("https://")
+        assert "/clip/v2/resource/entertainment_configuration" in url
 
     @patch("hue_visualizer.bridge.discovery.requests.get")
-    def test_raises_on_error_response(self, mock_get):
+    def test_sends_application_key_header(self, mock_get):
         mock_resp = MagicMock()
-        mock_resp.json.return_value = [
-            {"error": {"type": 1, "description": "unauthorized user"}}
-        ]
+        mock_resp.json.return_value = {"data": []}
         mock_resp.raise_for_status = MagicMock()
         mock_get.return_value = mock_resp
 
-        with pytest.raises(BridgeConnectionError, match="Failed to list"):
-            list_entertainment_areas("10.0.0.1", "bad")
+        list_entertainment_areas("10.0.0.1", "myuser")
+        headers = mock_get.call_args[1].get("headers", {})
+        assert headers.get("hue-application-key") == "myuser"
 
     @patch("hue_visualizer.bridge.discovery.requests.get")
     def test_raises_on_network_error(self, mock_get):
