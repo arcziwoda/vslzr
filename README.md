@@ -6,9 +6,7 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-yellow.svg)](https://www.python.org/)
 [![Hue Entertainment API](https://img.shields.io/badge/Hue-Entertainment%20API-orange.svg)](https://developers.meethue.com/)
 
-<!-- TODO: Add screenshot/demo GIF
-![VSLZR UI](docs/assets/screenshot.png)
--->
+![VSLZR](assets/demo.gif)
 
 ## Features
 
@@ -21,9 +19,18 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 - **Section awareness** — detects drops, buildups, and breakdowns to modulate intensity automatically
 - **Web control panel** — dark-themed UI with real-time spectrum/waveform visualization, all parameters adjustable live
 - **Audio-only mode** — works without a Hue Bridge for development and preview (WebSocket-driven light preview in browser)
-- **Cross-platform** — macOS (PyAudio) and Windows (WASAPI loopback via PyAudioWPatch), with standalone `.exe` builds
+- **Cross-platform** — macOS (PyAudio) and Windows (WASAPI loopback via PyAudioWPatch), with standalone desktop builds for both
 
-## Quick Start
+## Downloads
+
+Grab the latest build from [GitHub Releases](https://github.com/arcziwoda/vslzr/releases):
+
+| Platform | Package | Notes |
+|----------|---------|-------|
+| **Windows** | `VSLZR-vX.X.X-windows-x64.zip` | Runs as system tray icon, opens browser automatically |
+| **macOS** | `VSLZR-vX.X.X-macos-arm64.dmg` | Menu bar app. Not signed — right-click → Open on first launch |
+
+## Running from Source
 
 ### Prerequisites
 
@@ -32,29 +39,31 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 brew install portaudio mbedtls@2
 ```
 
-**Windows:** No system dependencies — Python wheels include everything. Requires **Python 3.12** (see [Windows notes](#windows)).
+**Windows:** No system dependencies — Python wheels include everything. Requires **Python 3.12** (`python-mbedtls` has no 3.13+ wheels).
 
 ### Install & Run
 
 ```bash
-# Clone
 git clone https://github.com/arcziwoda/vslzr.git
 cd vslzr
 
-# Install dependencies (requires uv — https://docs.astral.sh/uv/)
+# Requires uv — https://docs.astral.sh/uv/
 uv sync
 
-# Run (audio-only mode — no bridge config needed)
+# Audio-only mode — no bridge config needed
 uv run python -m hue_visualizer
+
+# Tests
+uv run pytest
 ```
 
-Open **http://localhost:8080** — you'll see the control panel with live audio visualization.
+Open **http://localhost:8080** — control panel with live audio visualization.
 
 ### Connect to Hue Bridge
 
-1. Click the **BRIDGE** button in the UI
-2. Follow the setup wizard — it discovers your bridge, pairs (press the link button), and lets you pick an entertainment area
-3. Credentials are saved automatically for next time
+1. Click **BRIDGE** in the UI
+2. Follow the wizard — discovers bridge, pairs (press the link button), pick an entertainment area
+3. Credentials saved automatically
 
 ## Architecture
 
@@ -96,29 +105,13 @@ All settings are optional and loaded from `.env`. See [`.env.example`](.env.exam
 | `BRIGHTNESS_GAMMA` | `2.2` | Perceptual gamma correction |
 | `MAX_FLASH_HZ` | `3.0` | Epilepsy safety flash limit (Hz) |
 
-## Windows
-
-Windows requires **Python 3.12** — the `python-mbedtls` dependency (needed for DTLS communication with the Hue Bridge) has no wheels for Python 3.13+.
-
-### Pre-built Release
-
-Download the latest `.exe` from [GitHub Releases](https://github.com/arcziwoda/vslzr/releases). Place your `.env` file next to the executable and run — it starts as a system tray icon and opens the browser automatically.
-
-## Development
-
-```bash
-uv sync                                   # Install all dependencies
-uv run python -m hue_visualizer           # Run the app
-uv run pytest                             # Run tests
-```
-
 ## Tech Stack
 
 - **Audio**: PyAudio / PyAudioWPatch, NumPy (FFT, Mel filterbank)
 - **Networking**: Hue Entertainment API via DTLS (python-mbedtls)
 - **Server**: FastAPI + uvicorn, WebSocket for real-time UI updates
 - **Frontend**: Vanilla JS + Canvas (single-file, no build step)
-- **Packaging**: uv, PyInstaller (Windows `.exe`), GitHub Actions CI
+- **Packaging**: uv, PyInstaller (Windows `.exe`, macOS `.app`), GitHub Actions CI
 
 ## License
 
