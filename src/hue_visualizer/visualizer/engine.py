@@ -485,8 +485,9 @@ class EffectEngine:
         self._chase_decay_tau: float = 0.15
 
         # --- Wave pulse (Task 2.12) ---
-        # Per-bulb delay for beat-triggered wave pulse propagation (seconds).
-        self._wave_pulse_delay_per_bulb: float = 0.075  # 75ms per bulb
+        # Total travel time for pulse across full light span (seconds).
+        # Pulse timing is based on physical position (0-1), not array index.
+        self._wave_pulse_total_travel: float = 0.45  # ~75ms per bulb at 6 lights
         # Exponential decay tau for wave pulse brightness (seconds).
         self._wave_pulse_decay_tau: float = 0.20  # 200ms decay
         # Wave pulse strength (0-1): how much brightness the pulse adds.
@@ -1384,9 +1385,9 @@ class EffectEngine:
 
                 # Task 2.12: Beat-triggered wave pulse on top of continuous sine
                 if self.spatial_mapper._wave_pulse_active:
-                    # Each bulb activates after i * delay_per_bulb from pulse start
+                    # Each bulb activates based on its physical position (0-1)
                     time_since_pulse = now - self.spatial_mapper._wave_pulse_start
-                    bulb_trigger_time = i * self._wave_pulse_delay_per_bulb
+                    bulb_trigger_time = pos * self._wave_pulse_total_travel
                     time_since_trigger = time_since_pulse - bulb_trigger_time
 
                     if time_since_trigger >= 0:
@@ -1398,8 +1399,7 @@ class EffectEngine:
                             brightness = min(1.0, brightness + pulse_b)
 
                     # Deactivate pulse after it has fully traveled + decayed
-                    total_travel = (n_lights - 1) * self._wave_pulse_delay_per_bulb
-                    if time_since_pulse > total_travel + self._wave_pulse_decay_tau * 4:
+                    if time_since_pulse > self._wave_pulse_total_travel + self._wave_pulse_decay_tau * 4:
                         self.spatial_mapper._wave_pulse_active = False
 
                 if centroid_mode or self._num_groups <= 1:
