@@ -1,6 +1,6 @@
 # VSLZR
 
-Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and adaptive beat detection, then drives the Hue Entertainment API for low-latency light control synchronized to your music.
+Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and multi-agent beat tracking, then drives the Hue Entertainment API for low-latency light control synchronized to your music.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-yellow.svg)](https://www.python.org/)
@@ -10,7 +10,7 @@ Real-time music visualization for Philips Hue lights. Analyzes audio via FFT and
 
 ## Features
 
-- **Beat detection** — adaptive threshold with PLL-based BPM tracking, per-band onset separation (kick/snare/hi-hat), and predictive triggering to compensate for system latency
+- **Beat detection** — SuperFlux onset detection with multi-agent PI-PLL tracking, per-band onset separation (kick/snare/hi-hat), predictive triggering, and coasting through breakdowns
 - **7-band FFT analysis** — spectral decomposition with Mel filterbank, per-frequency brightness and color mapping in spatial modes
 - **Hybrid visualization engine** — blends a slow generative layer (hue rotation + BPM-synced breathing) with a fast reactive layer based on audio energy
 - **Genre presets** — tuned parameter sets for techno, house, drum & bass, and ambient
@@ -75,10 +75,10 @@ Audio Input → PyAudio Capture (thread) → Ring Buffer
                                             ↓
                               FFT Analyzer (2048-pt Hann window)
                                             ↓
-                              Beat Detector (adaptive threshold + PLL)
+                              Beat Detector (SuperFlux + multi-agent PI-PLL)
                                             ↓
                     ┌───────────────────────────────────────────┐
-                    │           Effect Engine (~30 Hz)          │
+                    │           Effect Engine (~50 Hz)          │
                     │                                           │
                     │   ColorMapper (spectral → HSV)            │
                     │   SpatialMapper (per-light distribution)  │

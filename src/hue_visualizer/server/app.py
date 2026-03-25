@@ -295,8 +295,17 @@ class AudioPipeline:
         return peak_features
 
 
-def _prepare_spectrum(spectrum_db: np.ndarray, n_bins: int = SPECTRUM_BINS) -> list[float]:
-    """Downsample FFT spectrum to n_bins, normalized to 0-1."""
+def _prepare_spectrum(
+    spectrum_db: np.ndarray,
+    n_bins: int = SPECTRUM_BINS,
+    sample_rate: int = 44100,
+    fft_size: int = 2048,
+) -> list[float]:
+    """Downsample FFT spectrum to n_bins, normalized to 0-1.
+
+    At high sample rates (e.g. 192kHz) the FFT covers far beyond audible range.
+    We limit to 22050 Hz so all bins represent useful audio.
+    """
     if len(spectrum_db) == 0:
         return [0.0] * n_bins
 
@@ -304,8 +313,15 @@ def _prepare_spectrum(spectrum_db: np.ndarray, n_bins: int = SPECTRUM_BINS) -> l
     min_db, max_db = -80.0, 0.0
     normalized = np.clip((spectrum_db - min_db) / (max_db - min_db), 0, 1)
 
-    # Log-spaced bin edges for better low-frequency resolution
+    # Limit to audible range (22050 Hz) — at 192kHz only ~21% of bins are audible
     n_fft = len(normalized)
+    nyquist = sample_rate / 2
+    if nyquist > 22050:
+        max_bin = int(22050 * fft_size / sample_rate) + 1
+        n_fft = min(n_fft, max_bin)
+        normalized = normalized[:n_fft]
+
+    # Log-spaced bin edges for better low-frequency resolution
     edges = np.unique(
         np.logspace(0, np.log10(max(n_fft, 2)), n_bins + 1, dtype=int).clip(0, n_fft - 1)
     )
@@ -422,7 +438,13 @@ async def audio_loop():
 
                 data = {
                     "type": "audio",
-                    "spectrum": _prepare_spectrum(f.spectrum),
+                    "sample_rate": pipeline.analyzer.sample_rate,
+                    "fft_size": pipeline.analyzer.fft_size,
+                    "spectrum": _prepare_spectrum(
+                        f.spectrum,
+                        sample_rate=pipeline.analyzer.sample_rate,
+                        fft_size=pipeline.analyzer.fft_size,
+                    ),
                     "bands": [round(v, 4) for v in f.band_energies_raw.tolist()],
                     "band_names": BAND_NAMES,
                     "beat": {

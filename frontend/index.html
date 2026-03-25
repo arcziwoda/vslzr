@@ -27,6 +27,7 @@ html, body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
+  color-scheme: dark;
   font-family: 'IBM Plex Mono', monospace;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
@@ -1396,6 +1397,7 @@ body::after {
         <button data-genre="techno" class="active">TECHNO</button>
         <button data-genre="house">HOUSE</button>
         <button data-genre="dnb">DNB</button>
+        <button data-genre="trap">TRAP</button>
         <button data-genre="ambient">AMBIENT</button>
       </div>
     </div>
@@ -1447,6 +1449,7 @@ body::after {
         <button data-palette="techno">TECHNO</button>
         <button data-palette="house">HOUSE</button>
         <button data-palette="dnb">DNB</button>
+        <button data-palette="trap">TRAP</button>
         <button data-palette="ambient">AMBIENT</button>
       </div>
     </div>
@@ -1574,12 +1577,23 @@ var $lightStatus = document.getElementById('lightStatus');
 var specCtx, bandCtx;
 var specW, specH, bandW, bandH;
 
-// Precompute center frequency for each spectrum bin
-// Replicates backend: np.unique(np.logspace(0, log10(n_fft), 65, dtype=int))
-var SPEC_BIN_FREQS = (function() {
-  var nFft = 1024; // half of FFT_SIZE=2048
+// Center frequency for each spectrum bin — recomputed when backend reports sample_rate/fft_size
+var SPEC_BIN_FREQS = [];
+var _specSampleRate = 0;
+var _specFftSize = 0;
+
+function _recomputeSpecBinFreqs(sampleRate, fftSize) {
+  if (sampleRate === _specSampleRate && fftSize === _specFftSize) return;
+  _specSampleRate = sampleRate;
+  _specFftSize = fftSize;
+  // Mirror backend: limit to audible range (22050 Hz) at high sample rates
+  var nFft = fftSize / 2;
+  var nyquist = sampleRate / 2;
+  if (nyquist > 22050) {
+    nFft = Math.min(nFft, Math.floor(22050 * fftSize / sampleRate) + 1);
+  }
   var nBins = 64;
-  var hzPerBin = 44100 / 2048;
+  var hzPerBin = sampleRate / fftSize;
   var logMax = Math.log10(nFft);
   var raw = [];
   for (var i = 0; i <= nBins; i++) {
@@ -1594,8 +1608,10 @@ var SPEC_BIN_FREQS = (function() {
     freqs.push((edges[i] + edges[i + 1]) / 2 * hzPerBin);
   }
   while (freqs.length < nBins) freqs.push(0);
-  return freqs;
-})();
+  SPEC_BIN_FREQS = freqs;
+}
+// Initialize with defaults until backend reports actual values
+_recomputeSpecBinFreqs(44100, 2048);
 
 // Canvas setup with DPI scaling
 function setupCanvas(canvas) {
@@ -1645,6 +1661,7 @@ function connect() {
     }
     if (d.type !== 'audio') return;
 
+    if (d.sample_rate && d.fft_size) _recomputeSpecBinFreqs(d.sample_rate, d.fft_size);
     for (var i = 0; i < 64; i++) S.spectrum[i] = d.spectrum[i] || 0;
     for (var i = 0; i < 7; i++) S.bands[i] = d.bands[i] || 0;
 

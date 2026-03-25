@@ -7,6 +7,15 @@ Algorithmic palette generation (Task 2.10):
   - complementary: 2 colors 180 degrees apart on the color wheel
   - triadic: 3 colors 120 degrees apart
   - analogous: 3 colors 30 degrees apart (tight cluster)
+
+Research basis for genre presets:
+  - Palmer, Schloss, Xu & Prado-León (2013, PNAS): music-color via shared emotion
+  - Spence (2011): crossmodal correspondences (louder→brighter, pitch→brightness)
+  - Marks (1974): pitch-brightness mapping
+  - Ward, Huckstep & Tsakanikos (2006): synesthesia pitch→hue
+  - Stupacher, Hove & Janata (2016): spectral flux 0-200 Hz predicts groove
+  - Vroomen & Keetels (2010): AV temporal binding window 100-300 ms
+  - EMA coefficients derived for 50 Hz update: τ = -20ms / ln(1-α)
 """
 
 from dataclasses import dataclass
@@ -24,11 +33,12 @@ PALETTES: dict[str, tuple[float, ...]] = {
     "ocean": (200.0, 180.0, 240.0, 160.0),     # blue, cyan, violet, aqua
     "sunset": (15.0, 35.0, 300.0, 340.0),      # coral, amber, pink, rose
     "monochrome": (240.0, 230.0, 250.0, 220.0),  # blue shades — subtle variation
-    # Genre-specific palettes (from research)
-    "techno": (280.0, 240.0, 0.0),             # deep purple, midnight blue, blood red
-    "house": (35.0, 15.0, 180.0),              # warm amber, coral, cyan
-    "dnb": (120.0, 60.0, 210.0),               # neon green, yellow, electric blue
-    "ambient": (200.0, 270.0, 220.0),          # ice blue, lavender, soft sky
+    # Genre-specific palettes (research-backed — Palmer et al. 2013, club conventions)
+    "techno": (220.0, 240.0, 260.0, 0.0),      # deep azure, blue, blue-violet, red accent
+    "house": (300.0, 330.0, 30.0, 270.0),      # magenta, rose/pink, amber/gold, purple
+    "dnb": (120.0, 180.0, 240.0, 280.0),       # neon green, cyan, blue, violet
+    "ambient": (240.0, 270.0, 200.0, 30.0),    # deep blue, purple, teal, warm amber accent
+    "trap": (0.0, 270.0, 30.0, 330.0),         # red, purple, orange/gold, pink/rose
 }
 
 DEFAULT_PALETTE = "neon"
@@ -120,59 +130,73 @@ class GenrePreset:
 PRESETS: dict[str, GenrePreset] = {
     "techno": GenrePreset(
         name="techno",
-        beat_cooldown_ms=300,
-        bass_boost=2.5,
-        bpm_min=120.0,
+        beat_cooldown_ms=250,       # catches every kick, filters 8th-note hats
+        bass_boost=1.4,             # mid-bass punch (40-100 Hz), not sub-dominant
+        bpm_min=118.0,
         bpm_max=150.0,
-        attack_alpha=0.8,
-        release_alpha=0.15,
-        spatial_mode="frequency_zones",
-        flash_tau=0.20,  # Snappy — 200ms decay
-        hue_drift_speed=4.0,
-        default_palette="techno",  # deep purple, midnight blue, blood red
-        strobe_frequency=7.0,  # Fast club strobe (safe mode clamps to 2 Hz)
+        attack_alpha=0.85,          # τ≈10.5ms — near-instant, matches kick A=0ms
+        release_alpha=0.08,         # τ≈240ms — 52% of beat interval, distinct pulses
+        spatial_mode="mirror",      # Berghain-style symmetric minimalism
+        flash_tau=0.12,             # clean isolated pulses, 2% residual at next beat
+        hue_drift_speed=4.0,        # full rotation ~90s, matches section length
+        default_palette="techno",   # deep azure/blue/violet + red accent
+        strobe_frequency=2.5,       # aggressive but below 3 Hz safety
     ),
     "house": GenrePreset(
         name="house",
-        beat_cooldown_ms=320,
-        bass_boost=2.0,
-        bpm_min=115.0,
-        bpm_max=135.0,
-        attack_alpha=0.65,
-        release_alpha=0.12,
-        spatial_mode="frequency_zones",
-        flash_tau=0.30,  # Warm glow — 300ms decay
-        hue_drift_speed=8.0,
-        default_palette="house",  # warm amber, coral, cyan
-        strobe_frequency=5.0,  # Moderate strobe
+        beat_cooldown_ms=280,       # groove-oriented, filters shaker 16ths
+        bass_boost=1.2,             # warm round bass, balanced with mids/vocals
+        bpm_min=110.0,
+        bpm_max=132.0,
+        attack_alpha=0.70,          # τ≈16.6ms — softer than techno, breathes with groove
+        release_alpha=0.07,         # τ≈276ms — warm sustained glow between kicks
+        spatial_mode="wave",        # flowing wash, disco mirror-ball heritage
+        flash_tau=0.15,             # warm tail, 4% residual at next beat
+        hue_drift_speed=12.0,       # colorful, matches faster harmonic rhythm
+        default_palette="house",    # magenta, rose, amber/gold, purple — disco heritage
+        strobe_frequency=1.5,       # gentle, groove-friendly
     ),
     "dnb": GenrePreset(
         name="dnb",
-        beat_cooldown_ms=300,
-        bass_boost=3.0,
+        beat_cooldown_ms=150,       # catches kick+snare two-step (min gap ~172ms)
+        bass_boost=1.6,             # massive sub from Reese/modulated basslines
         bpm_min=155.0,
         bpm_max=185.0,
-        attack_alpha=0.9,
-        release_alpha=0.15,
-        spatial_mode="wave",
-        flash_tau=0.15,  # Very snappy — 150ms for fast beats
-        hue_drift_speed=10.0,
-        default_palette="dnb",  # neon green, yellow, electric blue
-        strobe_frequency=6.0,  # Fast — DnB energy
+        attack_alpha=0.92,          # τ≈7.9ms — fastest, tracks 20-40 transients/bar
+        release_alpha=0.14,         # τ≈133ms — sharp staccato, 7% residual at next hit
+        spatial_mode="frequency_zones",  # stratified: sub, mid-bass processing, hats
+        flash_tau=0.08,             # razor-sharp pulses, 1.3% at next quarter note
+        hue_drift_speed=18.0,       # fast rotation ~20s, matches high energy
+        default_palette="dnb",      # neon green, cyan, blue, violet — laser convention
+        strobe_frequency=3.0,       # max safe — DnB drops demand intensity
     ),
     "ambient": GenrePreset(
         name="ambient",
-        beat_cooldown_ms=500,
-        bass_boost=1.5,
-        bpm_min=60.0,
-        bpm_max=120.0,
-        attack_alpha=0.3,
-        release_alpha=0.05,
-        spatial_mode="uniform",
-        flash_tau=0.50,  # Slow gentle pulse — 500ms
-        hue_drift_speed=2.0,
-        default_palette="ambient",  # ice blue, lavender, soft sky
-        strobe_frequency=3.0,  # Gentle pulse
+        beat_cooldown_ms=600,       # only major events trigger, filters micro-transients
+        bass_boost=0.8,             # below neutral — timbral, not percussive
+        bpm_min=50.0,
+        bpm_max=125.0,
+        attack_alpha=0.15,          # τ≈123ms — glacial fade-in, mirrors pad attacks
+        release_alpha=0.007,        # τ≈2850ms — ~3s decay, luminous respiration
+        spatial_mode="wave",        # slow immersive drift, Eliasson-style
+        flash_tau=0.80,             # slow bloom and fade, 29% at 1s
+        hue_drift_speed=1.5,        # full rotation ~4min, glacial harmonic evolution
+        default_palette="ambient",  # deep blue, purple, teal, warm amber accent
+        strobe_frequency=0.0,       # no strobe — antithetical to ambient
+    ),
+    "trap": GenrePreset(
+        name="trap",
+        beat_cooldown_ms=350,       # half-time feel (~857ms between main hits)
+        bass_boost=2.0,             # highest — 808 sub-bass is the genre identity
+        bpm_min=60.0,              # locks PLL to half-time felt tempo
+        bpm_max=90.0,              # prevents double-time lock at 120-180
+        attack_alpha=0.80,          # τ≈12.4ms — snaps to 808 transient
+        release_alpha=0.05,         # τ≈390ms — sustains with 808 decay (300ms-2s)
+        spatial_mode="mirror",      # center-focused mix (808/kick/vocals mono)
+        flash_tau=0.25,             # heavy sustained impact, visual 808 "boom"
+        hue_drift_speed=6.0,        # moderate, matches verse/hook section pace
+        default_palette="trap",     # red, purple, orange/gold, pink — high power
+        strobe_frequency=2.0,       # powerful but spacious, not frantic
     ),
 }
 

@@ -9,6 +9,7 @@ class TestPresets:
         assert "house" in PRESETS
         assert "dnb" in PRESETS
         assert "ambient" in PRESETS
+        assert "trap" in PRESETS
 
     def test_default_genre_exists(self):
         assert DEFAULT_GENRE in PRESETS
@@ -16,9 +17,10 @@ class TestPresets:
     def test_preset_values_in_range(self):
         for name, p in PRESETS.items():
             assert 50 <= p.beat_cooldown_ms <= 1000, f"{name}: bad cooldown"
-            assert 1.0 <= p.bass_boost <= 5.0, f"{name}: bad bass_boost"
+            assert 0.5 <= p.bass_boost <= 5.0, f"{name}: bad bass_boost"
             assert 0.0 < p.attack_alpha <= 1.0, f"{name}: bad attack"
             assert 0.0 < p.release_alpha <= 1.0, f"{name}: bad release"
+            assert 0.0 <= p.strobe_frequency <= 3.0, f"{name}: strobe exceeds 3 Hz safety"
 
     def test_preset_is_frozen(self):
         p = PRESETS["techno"]
@@ -55,36 +57,44 @@ class TestGenrePaletteLink:
             )
 
     def test_genre_specific_palettes_exist(self):
-        """Genre-specific palettes (techno, house, dnb, ambient) should be in PALETTES."""
-        for genre_name in ("techno", "house", "dnb", "ambient"):
+        """Genre-specific palettes should be in PALETTES."""
+        for genre_name in ("techno", "house", "dnb", "ambient", "trap"):
             assert genre_name in PALETTES, f"Missing genre palette: {genre_name}"
 
     def test_techno_palette_has_correct_hues(self):
-        """Techno: deep purple (~280), midnight blue (~240), blood red (~0)."""
+        """Techno: deep azure (~220), blue (~240), blue-violet (~260), red accent (~0)."""
         palette = PALETTES["techno"]
-        assert any(abs(h - 280.0) < 20 for h in palette), "Missing deep purple"
-        assert any(abs(h - 240.0) < 20 for h in palette), "Missing midnight blue"
-        assert any(h < 20 or h > 340 for h in palette), "Missing blood red"
+        assert any(abs(h - 220.0) < 25 for h in palette), "Missing deep azure"
+        assert any(abs(h - 240.0) < 25 for h in palette), "Missing blue"
+        assert any(h < 20 or h > 340 for h in palette), "Missing red accent"
 
     def test_house_palette_has_correct_hues(self):
-        """House: warm amber (~35), coral (~15), cyan (~180)."""
+        """House: magenta (~300), rose/pink (~330), amber/gold (~30), purple (~270)."""
         palette = PALETTES["house"]
-        assert any(abs(h - 35.0) < 20 for h in palette), "Missing warm amber"
-        assert any(abs(h - 15.0) < 20 for h in palette), "Missing coral"
-        assert any(abs(h - 180.0) < 20 for h in palette), "Missing cyan"
+        assert any(abs(h - 300.0) < 20 for h in palette), "Missing magenta"
+        assert any(abs(h - 330.0) < 20 for h in palette), "Missing rose/pink"
+        assert any(abs(h - 30.0) < 20 for h in palette), "Missing amber/gold"
 
     def test_dnb_palette_has_correct_hues(self):
-        """DnB: neon green (~120), yellow (~60), electric blue (~210)."""
+        """DnB: neon green (~120), cyan (~180), blue (~240), violet (~280)."""
         palette = PALETTES["dnb"]
         assert any(abs(h - 120.0) < 20 for h in palette), "Missing neon green"
-        assert any(abs(h - 60.0) < 20 for h in palette), "Missing yellow"
-        assert any(abs(h - 210.0) < 20 for h in palette), "Missing electric blue"
+        assert any(abs(h - 180.0) < 20 for h in palette), "Missing cyan"
+        assert any(abs(h - 240.0) < 20 for h in palette), "Missing blue"
 
     def test_ambient_palette_has_correct_hues(self):
-        """Ambient: ice blue (~200), lavender (~270), soft tones."""
+        """Ambient: deep blue (~240), purple (~270), teal (~200), warm amber (~30)."""
         palette = PALETTES["ambient"]
-        assert any(abs(h - 200.0) < 25 for h in palette), "Missing ice blue"
-        assert any(abs(h - 270.0) < 25 for h in palette), "Missing lavender"
+        assert any(abs(h - 240.0) < 25 for h in palette), "Missing deep blue"
+        assert any(abs(h - 270.0) < 25 for h in palette), "Missing purple"
+        assert any(abs(h - 200.0) < 25 for h in palette), "Missing teal"
+
+    def test_trap_palette_has_correct_hues(self):
+        """Trap: red (~0), purple (~270), orange/gold (~30), pink/rose (~330)."""
+        palette = PALETTES["trap"]
+        assert any(h < 20 or h > 340 for h in palette), "Missing red"
+        assert any(abs(h - 270.0) < 25 for h in palette), "Missing purple"
+        assert any(abs(h - 30.0) < 20 for h in palette), "Missing orange/gold"
 
     def test_each_genre_has_unique_palette(self):
         """Each genre should map to a different palette."""
