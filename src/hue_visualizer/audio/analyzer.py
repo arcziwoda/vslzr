@@ -37,6 +37,7 @@ class AudioFeatures:
     spectral_flux: float = 0.0  # Rate of spectral change
     spectral_rolloff: float = 0.0  # Frequency below which 85% energy lives
     spectral_flatness: float = 0.0  # 0=tonal, 1=noise-like
+    superflux_onset: float = 0.0  # SuperFlux onset strength (log-compressed, max-filtered)
 
     # Amplitude
     rms: float = 0.0  # Root mean square energy (normalized 0-1)
@@ -118,6 +119,9 @@ class AudioAnalyzer:
         )
         self._mel_max = np.ones(self._n_mel_bands) * 1e-6
         self._mel_max_decay = 0.995  # Same decay as 7-band system
+
+        # --- SuperFlux onset detection (Böck & Widmer, DAFx 2013) ---
+        self._prev_mel_magnitude: np.ndarray | None = None
 
         # Sliding-window RMS normalization (~5 seconds at audio frame rate)
         self._rms_window_size = int(5.0 * sample_rate / hop_size)  # ~215 frames at 44100/1024
@@ -213,6 +217,25 @@ class AudioAnalyzer:
         raw_mel = self._mel_filterbank @ power
         self._mel_max = np.maximum(raw_mel, self._mel_max * self._mel_max_decay)
         features.mel_energies = raw_mel / (self._mel_max + 1e-10)
+
+        # --- SuperFlux onset detection (Böck & Widmer 2013) ---
+        # Mel-domain magnitude (not power) with log compression
+        mel_magnitude = self._mel_filterbank @ magnitude
+        log_mel = np.log1p(100.0 * mel_magnitude)
+
+        if self._prev_mel_magnitude is not None:
+            prev_log_mel = np.log1p(100.0 * self._prev_mel_magnitude)
+            # Max filter (size=3) across frequency bins — suppresses vibrato
+            padded = np.pad(prev_log_mel, (1, 1), mode='edge')
+            max_prev = np.maximum(
+                np.maximum(padded[:-2], padded[1:-1]),
+                padded[2:]
+            )
+            # Half-wave rectified spectral flux
+            diff = log_mel - max_prev
+            features.superflux_onset = float(np.sum(np.maximum(0, diff)))
+
+        self._prev_mel_magnitude = mel_magnitude.copy()
 
         # Spectral centroid: weighted mean frequency
         mag_sum = np.sum(magnitude)
@@ -324,6 +347,7 @@ class AudioAnalyzer:
         """Reset internal state (previous spectrum, normalization)."""
         self._prev_frame = None
         self._prev_magnitude = None
+        self._prev_mel_magnitude = None
         self._band_max = np.ones(7) * 1e-6
         self._mel_max = np.ones(self._n_mel_bands) * 1e-6
         self._rms_history.clear()
