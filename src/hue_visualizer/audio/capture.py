@@ -189,61 +189,80 @@ class AudioCapture:
 
     @property
     def current_device_info(self) -> Optional[dict]:
-        """Return info dict for the currently active device, or None if not running."""
+        """Return info dict for the currently active device, or None if not running.
+
+        Logs a warning if PyAudio is initialized but device info lookup fails —
+        previously this was a silent fallback that masked "device -> unknown" bugs.
+        """
         if not self._pa:
             return None
         try:
             info = self._get_device_info()
-            return {
-                "index": info.get("index", self.device_index),
-                "name": info["name"],
-                "channels": info["maxInputChannels"],
-                "sample_rate": int(info["defaultSampleRate"]),
-                "stream_channels": getattr(self, "_device_channels", 1),
-                "stream_rate": getattr(self, "_device_rate", self.sample_rate),
-            }
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                f"PyAudio active but device_info lookup failed "
+                f"(device_index={self.device_index}): {e}"
+            )
             return None
+        return {
+            "index": info.get("index", self.device_index),
+            "name": info["name"],
+            "channels": info["maxInputChannels"],
+            "sample_rate": int(info["defaultSampleRate"]),
+            "stream_channels": getattr(self, "_device_channels", 1),
+            "stream_rate": getattr(self, "_device_rate", self.sample_rate),
+        }
 
     def switch_device(self, device_index: Optional[int]) -> dict:
         """Switch to a different audio input device at runtime.
 
-        Stops the current stream, updates device_index, restarts.
-        On failure, rolls back to the previous device.
+        Stops the current stream (if any), updates device_index, starts the
+        new device. Always starts the new device — even if capture was not
+        previously running (e.g. initial start failed, or stream died from
+        consecutive errors). User explicitly picking a device means "make
+        this device active".
+
+        On failure, rolls back to the previous device and re-raises.
 
         Returns:
             Device info dict for the new device.
 
         Raises:
-            AudioCaptureError: If the new device can't be opened.
+            AudioCaptureError: If the new device can't be opened (and rollback
+                state is consistent — either old device running, or fully stopped).
         """
         old_device_index = self.device_index
-        was_running = self._running
 
-        if was_running:
-            self.stop()
+        # Always tear down current stream cleanly. stop() is a no-op if not running.
+        self.stop()
 
         with self._lock:
             self._frames.clear()
 
         self.device_index = device_index
 
-        if was_running:
+        try:
+            self.start()
+        except AudioCaptureError as e:
+            logger.warning(
+                f"Failed to open device {device_index}: {e} — "
+                f"rolling back to {old_device_index}"
+            )
+            self.device_index = old_device_index
             try:
                 self.start()
-            except AudioCaptureError:
-                logger.warning(
-                    f"Failed to open device {device_index}, "
-                    f"rolling back to {old_device_index}"
+            except AudioCaptureError as rollback_err:
+                logger.error(
+                    f"Rollback to device {old_device_index} also failed: {rollback_err}"
                 )
-                self.device_index = old_device_index
-                try:
-                    self.start()
-                except AudioCaptureError:
-                    pass
-                raise
+            raise
 
-        return self.current_device_info or {"index": device_index, "name": "unknown"}
+        info = self.current_device_info
+        if info is None:
+            raise AudioCaptureError(
+                f"Device {device_index} opened but device info unavailable"
+            )
+        return info
 
     def list_devices(self) -> list[dict]:
         """List available audio input devices."""
