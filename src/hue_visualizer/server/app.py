@@ -491,6 +491,8 @@ async def audio_loop():
                     data["strobe_active"] = effect_engine.strobe_active
                     # Calibration mode state
                     data["calibration_mode"] = effect_engine.calibration_mode
+                    # Metric beat filter state (PLL-validated reactive triggers)
+                    data["metric_filter"] = effect_engine.use_metric_filtered_beats
                     # Task 2.6: Calibration delay state
                     data["calibration_delay"] = round(effect_engine.calibration_delay_ms)
                     # Task 2.8: Brightness min/max state
@@ -1138,6 +1140,10 @@ def _handle_control(msg: dict):
     elif t == "set_calibration_mode" and effect_engine:
         enabled = bool(msg.get("value", False))
         effect_engine.set_calibration_mode(enabled)
+
+    elif t == "set_metric_filter" and effect_engine:
+        enabled = bool(msg.get("value", False))
+        effect_engine.set_metric_filter(enabled)
 
     elif t == "set_calibration_delay" and effect_engine:
         # Task 2.6: Manual calibration delay

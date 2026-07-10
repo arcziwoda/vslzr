@@ -553,6 +553,14 @@ class EffectEngine:
         self._calibration_flash_tau: float = 0.05  # 50ms decay — very sharp
         self._calibration_flash_brightness: float = 0.0
 
+        # --- Metric-beat filter ---
+        # When True, reactive beat triggers consume BeatInfo.is_metric_beat
+        # (PLL-validated onsets — onset aligns with best agent's expected phase).
+        # When False, fall back to BeatInfo.is_beat (raw onset past cooldown).
+        # Default OFF for A/B testing — toggle via UI to compare with old behavior.
+        # Once benchmarked positive, flip default to True in a follow-up.
+        self._use_metric_filtered_beats: bool = False
+
         # --- Section detection state (Task 1.3) ---
         self._current_section = Section.NORMAL
         self._section_intensity: float = 0.0
@@ -1191,6 +1199,23 @@ class EffectEngine:
             self._calibration_flash_brightness = 0.0
         logger.info(f"Calibration mode -> {'ON' if enabled else 'OFF'}")
 
+    @property
+    def use_metric_filtered_beats(self) -> bool:
+        """Whether reactive triggers are gated on PLL-validated onsets."""
+        return self._use_metric_filtered_beats
+
+    def set_metric_filter(self, enabled: bool) -> None:
+        """Toggle PLL-validated beat filter.
+
+        When enabled, reactive beat triggers only fire on onsets aligned with
+        the best multi-agent PLL hypothesis (is_metric_beat). When disabled,
+        any raw onset (is_beat) fires a reactive trigger.
+
+        Predictive triggers are not affected by this flag.
+        """
+        self._use_metric_filtered_beats = enabled
+        logger.info(f"Metric beat filter -> {'ON' if enabled else 'OFF'}")
+
     def _resolve_beat_trigger(
         self, beat_info: BeatInfo, now: float
     ) -> tuple[bool, float]:
@@ -1232,8 +1257,16 @@ class EffectEngine:
                 if beat_strength < 0.1:
                     beat_strength = 0.7
 
-        # Reactive beat: only if we didn't already fire predictively
-        if beat_info.is_beat and not trigger_beat:
+        # Reactive beat: only if we didn't already fire predictively.
+        # When metric filter is on, gate the reactive trigger on PLL alignment
+        # (is_metric_beat) so hi-hat / snare onsets that don't match the
+        # dominant tempo hypothesis don't fire flashes between true beats.
+        reactive_signal = (
+            beat_info.is_metric_beat
+            if self._use_metric_filtered_beats
+            else beat_info.is_beat
+        )
+        if reactive_signal and not trigger_beat:
             if self._predictive_beat_fired:
                 time_since_prediction = abs(
                     now - self._last_predictive_beat_target

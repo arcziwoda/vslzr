@@ -37,7 +37,8 @@ class BeatAgent:
 class BeatInfo:
     """Beat detection results for a single frame."""
 
-    is_beat: bool = False
+    is_beat: bool = False  # Raw onset (energy or SuperFlux flux) past cooldown
+    is_metric_beat: bool = False  # Onset validated by PLL — aligns with best agent phase
     bpm: float = 0.0
     bpm_confidence: float = 0.0
     beat_strength: float = 0.0  # 0-1, how strong the beat is
@@ -256,6 +257,13 @@ class BeatDetector:
                     self._prediction_window[idx] = (pred_time, True)
                     break
 
+            # --- Metric-beat validation ---
+            # Check best agent's pre-correction phase alignment with this onset.
+            # is_metric_beat: True iff onset arrives where the dominant PLL hypothesis
+            # expects a beat (within ±_agent_confirmation_window). Falls back to raw
+            # is_beat while confidence is below the gate (PLL warm-up).
+            info.is_metric_beat = self._check_metric_beat_alignment()
+
             # --- Multi-agent PLL correction on detected beat ---
             # Information gate: only correct agents on strong onsets
             # (weak onsets/noise don't disturb agent phase during coasting)
@@ -343,6 +351,34 @@ class BeatDetector:
         return info
 
     # --- Multi-agent PLL methods ---
+
+    def _check_metric_beat_alignment(self) -> bool:
+        """Return True if current onset is aligned with the best agent's expected beat.
+
+        Must be called BEFORE _correct_agents_on_beat — the agent's phase is then
+        pre-correction, reflecting where the PLL thought the beat would land.
+
+        Falls back to True when PLL confidence is below the gate (warm-up window):
+        the multi-agent system has not yet locked, so we should not gate flashes —
+        downstream consumers see raw onsets until the PLL stabilises.
+        """
+        # Warm-up: not enough confidence to trust the filter — pass through raw onsets.
+        if self._confidence < self._confidence_gate:
+            return True
+
+        if not self._agents:
+            return True
+
+        best = max(self._agents, key=lambda a: a.score)
+        if best.period <= 0:
+            return True
+
+        phase_error = best.phase
+        if phase_error > 0.5:
+            phase_error -= 1.0
+        time_error = abs(phase_error * best.period)
+
+        return time_error <= self._agent_confirmation_window
 
     def _correct_agents_on_beat(self, now: float) -> None:
         """Correct all agents when a beat is detected. Agents whose predicted
