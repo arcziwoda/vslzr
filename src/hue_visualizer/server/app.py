@@ -181,11 +181,22 @@ class AudioPipeline:
         return self.capture.is_running
 
     def process_all(self) -> bool:
-        """Process all buffered audio frames. Returns True if any were processed."""
+        """Process all buffered audio frames. Returns True if any were processed.
+
+        Frames are timestamped on the audio clock anchored to the current wall
+        time: the newest frame is "now", earlier frames in the same batch are
+        one hop apart. The 50 Hz tick otherwise stamps 0-2 frames with the same
+        time, adding a tick of jitter to every onset and prediction.
+        """
         frames = self.capture.get_all_frames()
-        for frame in frames:
+        if not frames:
+            return False
+        now = time.monotonic()
+        frame_dur = self.analyzer.hop_size / self.analyzer.sample_rate
+        for i, frame in enumerate(frames):
+            timestamp = now - (len(frames) - 1 - i) * frame_dur
             self.features = self.analyzer.analyze(frame)
-            self.beat_info = self.beat_detector.detect(self.features)
+            self.beat_info = self.beat_detector.detect(self.features, timestamp=timestamp)
             if self.beat_info.is_beat:
                 self._pending_beat = True
                 self._pending_beat_strength = max(
@@ -234,7 +245,7 @@ class AudioPipeline:
             )
             self._peak_has_data = True
 
-        return len(frames) > 0
+        return True
 
     def consume_beat(self) -> tuple[bool, bool, float]:
         """Return and clear pending beat flags.

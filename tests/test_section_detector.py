@@ -155,13 +155,14 @@ class TestAdaptiveThreshold:
     """Verify Patin C threshold range."""
 
     def test_threshold_in_valid_range(self):
-        """Threshold should always be within [0.26, 0.52] (base/C_max to base/C_min × warmup)."""
+        """After warmup the threshold must lie in [base/C_max, base/C_min]."""
         det = _make_detector()
         results = _feed_frames(det, 500, rms_raw=0.05, bass_raw=0.05)
-        # After warmup (frame 344), threshold should be in [base/C_max, base/C_min]
-        # = [0.40/1.55, 0.40/1.0] = [0.258, 0.40]
+        # Bounds follow the detector's own constants (base 0.30, C in [1.0, 1.55])
+        lo = det._base_threshold / det._patin_c_max
+        hi = det._base_threshold / det._patin_c_min
         t = results[-1].adaptive_threshold
-        assert 0.2 < t < 0.5
+        assert lo - 1e-9 <= t <= hi + 1e-9
 
     def test_warmup_elevates_threshold(self):
         """During warmup, threshold should be elevated by warmup_mult."""

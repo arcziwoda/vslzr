@@ -228,3 +228,50 @@ Observations that add to the findings above:
 
 Targets after fixes, on these same scenarios: CMLc > 0.8 on the straight patterns, FP/min < 5,
 Miss/min < 5, BPM within 1% by 5 s, confidence ≥ 0.6 sustained under presets.
+
+## Fixes applied (September 2026) and results
+
+Commits, in order: glue fix for F2/F8; onset front-end + multi-agent rewrite (F1, F3, F4, F5,
+F6, F7, F14, F15); comb-phase seeding, prior-weighted pruning, quality-based confidence (F9);
+evidence-gated scoring, capture window, period anchoring; audio-clock timestamps (F10).
+
+Additional findings made while fixing, not in the original list:
+
+| ID | Where | One line |
+|---|---|---|
+| F16 | `beat_detector.py:detect` (old) | SuperFlux threshold was 1.5 x median over 0.2 s. Between hits the median is 0, so every positive flux value was an onset (gated only by cooldown). Replaced by the normalized ODF with `mean + 1.5 std` and a floor. |
+| F17 | `beat_detector.py:detect` (old) | Bass detector was level-based (`bass > median x 1.25`); the decaying kick tail re-fired onsets 70-90 ms after the attack with full weight. Replaced by rectified bass increase. |
+| F18 | `beat_detector.py:_seed_agents…` (old) | Agents were deduplicated on tempo only, so a wrong-phase agent (locked to a syncopated hit) blocked the correct phase at the same tempo forever. Now deduplicated on tempo and phase; phase from a comb search over the onset buffer. |
+| F19 | `beat_detector.py:_prune_agents` | A half/double-tempo agent is confirmed on every one of its predictions and out-scored the true agent whenever some beats lacked onsets. Pruning and selection now use `score x tempo_prior(autocorrelation)`. |
+| F20 | `beat_detector.py` | PI loop hunted +-1.5 BPM around the true tempo with phase errors of +-20 ms (period gains too high); autocorrelation lag quantization gave 129.2 for 130 BPM. Gains lowered, peaks parabolically interpolated, agents anchored to the autocorrelation period. |
+| F21 | `beat_detector.py` | During the rewrite a stale duplicate `_sync_best_agent` (syncing from the raw top score) shadowed the new one; caught by the unit-test sim. |
+
+Synthetic benchmark, metric stream (`is_metric_beat`), genre presets, baseline vs final:
+
+```
+scenario            F  base -> final   CMLc base -> final   FP/min base -> final   BPM final (true)
+techno_130          0.436 -> 1.000     0.013 -> 1.000       104.7 -> 0.0           130.2 (130)
+techno_130_synco    0.445 -> 1.000     0.012 -> 1.000       117.8 -> 0.0           130.3 (130)
+house_125           0.441 -> 1.000     0.014 -> 1.000        91.6 -> 0.0           125.4 (125)
+dnb_174             0.592 -> 0.907     0.082 -> 0.069        67.6 -> 0.0           173.9 (174)
+trap_70             0.262 -> 0.634     0.030 -> 0.031        53.5 -> 5.5            70.6 (70)
+techno_breakdown    0.500 -> 0.774     0.028 -> 0.328        82.9 -> 6.5           130.3 (130)
+silence_then_start  0.511 -> 0.994     0.039 -> 0.988        81.0 -> 0.0           129.9 (130)
+```
+
+Predicted stream (what drives the lights when confidence >= 0.6), presets, final: dnb F 0.997
+CMLc 0.994; trap F 0.825; breakdown F 0.870 (CMLc 0.54: ~0.2% period error accumulates over
+20 s of silence). Mean confidence after 5 s is 0.89-1.00 in every preset run (baseline 0.25-0.34,
+so the predictive path was never active).
+
+Remaining, by design or deferred:
+
+- DnB and half-time trap need their genre presets. With the default 80-180 range the
+  autocorrelation picks 2/3 tempo for two-step (117.5 for 174) and 2x for trap (140 for 70).
+  A metrical-level model (bar-level periodicity) would be needed to fix this without presets.
+- The metric stream cannot fire on beats without an onset (DnB beat 3, trap beats 2 and 4,
+  breakdowns). The predictive stream covers these.
+- F12 (bass boost clip at 1.5) and F13 (STFT overlap only correct for `hop == fft/2`) are
+  unchanged; both are outside the beat path's critical behaviour now that the ODF normalizes.
+- No real annotated audio yet. The synthetic scenarios are exact but idealized; the next step
+  is 3-5 real tracks with hand-corrected beat annotations on 30 s excerpts.
