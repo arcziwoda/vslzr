@@ -36,3 +36,4 @@ CLAUDE.md
 
 # Local audio for benchmarks (not distributed)
 audio/
+.venv-gt
