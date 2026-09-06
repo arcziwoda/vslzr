@@ -33,3 +33,6 @@ CLAUDE.md
 
 # Override global gitignore — keep PyInstaller spec in repo
 !*.spec
+
+# Local audio for benchmarks (not distributed)
+audio/
