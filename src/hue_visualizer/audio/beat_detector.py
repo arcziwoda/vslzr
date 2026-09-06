@@ -95,9 +95,15 @@ class BeatDetector:
         cooldown_ms: float = 300,
         bpm_min: float = 80.0,
         bpm_max: float = 180.0,
+        onset_source: str = "spectral",
     ):
         self.sample_rate = sample_rate
         self.hop_size = hop_size
+        # "spectral": bass increase + SuperFlux ODF (below). "rnn": the learned beat
+        # activation from AudioFeatures.beat_activation is the ODF and the strength.
+        # Default spectral because unit tests fabricate features; the server and the
+        # benchmarks select rnn (Settings.beat_onset_source).
+        self.set_onset_source(onset_source)
         self._manual_cooldown_sec = cooldown_ms / 1000.0
         self.cooldown_sec = self._manual_cooldown_sec
         self.auto_cooldown = True  # Auto-adjust cooldown based on BPM
@@ -263,6 +269,37 @@ class BeatDetector:
         info = BeatInfo()
 
         # --- 1. Onset detection function ---
+        if self._onset_source == "rnn":
+            onset_val, strong_val = self._activation_odf(features)
+        else:
+            onset_val, strong_val = self._spectral_odf(features)
+
+        self._onset_buffer.append(onset_val)
+        self._odf_history.append(onset_val)
+
+        if len(self._odf_history) < 10:
+            return info
+
+        # Adaptive threshold: mean + k*std over ~1 s, with an absolute floor and
+        # a relative margin so a flat ODF creeping up as the normalization
+        # reference decays cannot register as a stream of onsets
+        odf_arr = np.fromiter(self._odf_history, dtype=float, count=len(self._odf_history))
+        odf_mean = float(np.mean(odf_arr))
+        threshold = max(
+            self._odf_threshold_floor,
+            odf_mean + self._odf_threshold_sigmas * float(np.std(odf_arr)),
+            1.2 * odf_mean,
+        )
+        return self._detect_from_odf(features, now, info, onset_val, strong_val, threshold)
+
+    def _activation_odf(self, features: AudioFeatures) -> tuple[float, float]:
+        """ODF and strength from the learned beat activation (already a 0-1
+        probability, comparable across tracks and input gains)."""
+        activation = float(np.clip(features.beat_activation, 0.0, 1.0))
+        return activation, activation
+
+    def _spectral_odf(self, features: AudioFeatures) -> tuple[float, float]:
+        """Hand-crafted ODF: normalized bass increase + SuperFlux."""
         bass = features.bass_energy
         prev_bass_max = max(self._bass_prev) if self._bass_prev else bass
         self._bass_prev.append(bass)
@@ -291,24 +328,18 @@ class BeatDetector:
             0.5 * (bass_diff / (self._bass_diff_peak + 1e-9) + flux / (self._flux_peak + 1e-9)),
             0.0, 1.0,
         ))
+        return onset_val, strong_val
 
-        self._onset_buffer.append(onset_val)
-        self._odf_history.append(onset_val)
-
-        if len(self._odf_history) < 10:
-            return info
-
-        # Adaptive threshold: mean + k*std over ~1 s, with an absolute floor and
-        # a relative margin so a flat ODF creeping up as the normalization
-        # reference decays cannot register as a stream of onsets
-        odf_arr = np.fromiter(self._odf_history, dtype=float, count=len(self._odf_history))
-        odf_mean = float(np.mean(odf_arr))
-        threshold = max(
-            self._odf_threshold_floor,
-            odf_mean + self._odf_threshold_sigmas * float(np.std(odf_arr)),
-            1.2 * odf_mean,
-        )
-
+    def _detect_from_odf(
+        self,
+        features: AudioFeatures,
+        now: float,
+        info: BeatInfo,
+        onset_val: float,
+        strong_val: float,
+        threshold: float,
+    ) -> BeatInfo:
+        """Onset gating, agent tracking and the output streams for one frame."""
         # An onset is a rising edge of the ODF above threshold; the same transient
         # spans 2-3 frames (flux leads bass by one hop), so require a minimum gap.
         # Cooldowns are applied later, separately for the raw and metric streams.
@@ -1177,6 +1208,16 @@ class BeatDetector:
         self._mid_flux_history.clear()
 
     # --- Public setters for genre preset configuration ---
+
+    def set_onset_source(self, source: str) -> None:
+        """Select the onset detection function: "spectral" or "rnn"."""
+        if source not in ("spectral", "rnn"):
+            raise ValueError(f"unknown onset source {source!r}")
+        self._onset_source = source
+
+    @property
+    def onset_source(self) -> str:
+        return self._onset_source
 
     def set_cooldown(self, ms: float) -> None:
         """Set the manual cooldown in milliseconds and re-enable auto-cooldown."""

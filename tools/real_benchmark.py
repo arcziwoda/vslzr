@@ -104,7 +104,7 @@ def timeline(reference: np.ndarray, estimated: np.ndarray, duration: float,
 
 
 def run_track(slug: str, preset_override: str | None, with_engine: bool,
-              window: float) -> dict:
+              window: float, onset_source: str = "rnn") -> dict:
     annotation = load_annotation(slug)
     audio_path = TRACK_DIR / annotation["file"]
     audio, sr = load_audio(audio_path)
@@ -123,7 +123,8 @@ def run_track(slug: str, preset_override: str | None, with_engine: bool,
                   "cooldown_ms": DEFAULT_COOLDOWN_MS, "bass_boost": DEFAULT_BASS_BOOST}
 
     det = run_detector(audio, sr, config["bpm_min"], config["bpm_max"],
-                       config["cooldown_ms"], config["bass_boost"])
+                       config["cooldown_ms"], config["bass_boost"], onset_source=onset_source)
+    config["onset_source"] = onset_source
     streams = {name: score_stream(reference, times, duration)
                for name, times in det["streams"].items()}
     streams["metric"]["timeline"] = timeline(reference, det["streams"]["metric"], duration, window)
@@ -153,7 +154,7 @@ def run_track(slug: str, preset_override: str | None, with_engine: bool,
     }
 
     if with_engine and preset_name:
-        out = run_engine(audio, preset_name, metric_filter=True)
+        out = run_engine(audio, preset_name, metric_filter=True, onset_source=onset_source)
         intended = np.asarray(out["flashes"]) + LATENCY_COMP_MS / 1000.0
         engine = score_stream(reference, intended, duration)
         engine["predictive_active_fraction"] = out["predictive_active_fraction"]
@@ -200,6 +201,7 @@ def main() -> None:
     parser.add_argument("--preset", default=None, help="Force a genre preset")
     parser.add_argument("--no-engine", action="store_true")
     parser.add_argument("--window", type=float, default=30.0, help="Timeline window (s)")
+    parser.add_argument("--onset-source", choices=("rnn", "spectral"), default="rnn")
     args = parser.parse_args()
 
     if args.track:
@@ -213,7 +215,7 @@ def main() -> None:
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     summary = []
     for slug in slugs:
-        r = run_track(slug, args.preset, not args.no_engine, args.window)
+        r = run_track(slug, args.preset, not args.no_engine, args.window, args.onset_source)
         print_result(r)
         with open(RESULT_DIR / f"{slug}_{args.tag}.json", "w") as f:
             json.dump(r, f, indent=1)

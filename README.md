@@ -118,4 +118,11 @@ All settings are optional and loaded from `.env`. See [`.env.example`](.env.exam
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) for the code.
+
+The beat-tracking model weights in `src/hue_visualizer/audio/models/beats_lstm_2016.npz`
+are the online beat LSTM ensemble from [madmom](https://github.com/CPJKU/madmom)
+(Böck & Schedl 2011; Böck et al. 2016), licensed **CC BY-NC-SA 4.0** — non-commercial use
+only, see `src/hue_visualizer/audio/models/LICENSE`. A commercial deployment must replace
+that model (`BEAT_ONSET_SOURCE=spectral` switches to the hand-crafted onset function, which
+is markedly worse on real music, see `docs/real_audio_baseline.md`).

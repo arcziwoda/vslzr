@@ -140,6 +140,14 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
     )
+    beat_onset_source: str = Field(
+        default="rnn",
+        description="Onset detection function for the beat tracker: 'rnn' = learned beat "
+        "activation (madmom online LSTM ensemble, CC BY-NC-SA weights, see "
+        "audio/models/LICENSE), 'spectral' = hand-crafted bass increase + SuperFlux. "
+        "Falls back to spectral when the model file is missing.",
+        pattern="^(rnn|spectral)$",
+    )
     metric_beat_filter: bool = Field(
         default=True,
         description="Gate reactive beat flashes on PLL-validated onsets (is_metric_beat) "

@@ -82,15 +82,9 @@ class AudioPipeline:
             sample_rate=settings.sample_rate,
             buffer_size=settings.buffer_size,
         )
-        self.analyzer = AudioAnalyzer(
-            sample_rate=settings.sample_rate,
-            fft_size=settings.fft_size,
+        self.analyzer, self.beat_detector = self._build_dsp(
+            settings.sample_rate,
             bass_boost=settings.bass_boost_factor,
-            hop_size=settings.buffer_size,
-        )
-        self.beat_detector = BeatDetector(
-            sample_rate=settings.sample_rate,
-            hop_size=settings.buffer_size,
             cooldown_ms=settings.beat_cooldown_ms,
             bpm_min=settings.bpm_min,
             bpm_max=settings.bpm_max,
@@ -119,6 +113,30 @@ class AudioPipeline:
         self._peak_spectral_flux: float = 0.0
         self._peak_has_data: bool = False
 
+    def _build_dsp(self, sample_rate: int, bass_boost: float, cooldown_ms: float,
+                   bpm_min: float, bpm_max: float) -> tuple[AudioAnalyzer, BeatDetector]:
+        settings = self._settings
+        analyzer = AudioAnalyzer(
+            sample_rate=sample_rate,
+            fft_size=settings.fft_size,
+            bass_boost=bass_boost,
+            hop_size=settings.buffer_size,
+            use_beat_rnn=settings.beat_onset_source == "rnn",
+        )
+        onset_source = settings.beat_onset_source
+        if onset_source == "rnn" and not analyzer.beat_rnn_available:
+            logger.warning("Beat RNN model not found — falling back to the spectral ODF")
+            onset_source = "spectral"
+        detector = BeatDetector(
+            sample_rate=sample_rate,
+            hop_size=settings.buffer_size,
+            cooldown_ms=cooldown_ms,
+            bpm_min=bpm_min,
+            bpm_max=bpm_max,
+            onset_source=onset_source,
+        )
+        return analyzer, detector
+
     def start(self):
         self.capture.start()
         self._sync_sample_rate()
@@ -140,15 +158,9 @@ class AudioPipeline:
                 f"Device sample rate ({actual_rate} Hz) differs from DSP rate "
                 f"({self.analyzer.sample_rate} Hz) — re-initializing DSP components"
             )
-            self.analyzer = AudioAnalyzer(
-                sample_rate=actual_rate,
-                fft_size=settings.fft_size,
+            self.analyzer, self.beat_detector = self._build_dsp(
+                actual_rate,
                 bass_boost=self.analyzer.bass_boost,
-                hop_size=settings.buffer_size,
-            )
-            self.beat_detector = BeatDetector(
-                sample_rate=actual_rate,
-                hop_size=settings.buffer_size,
                 cooldown_ms=self.beat_detector._manual_cooldown_sec * 1000.0,
                 bpm_min=self.beat_detector.bpm_min,
                 bpm_max=self.beat_detector.bpm_max,

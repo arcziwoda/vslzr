@@ -38,6 +38,10 @@ class AudioFeatures:
     spectral_rolloff: float = 0.0  # Frequency below which 85% energy lives
     spectral_flatness: float = 0.0  # 0=tonal, 1=noise-like
     superflux_onset: float = 0.0  # SuperFlux onset strength (log-compressed, max-filtered)
+    # Learned beat activation (0-1 probability from audio/beat_rnn.py): the maximum
+    # over the ~2-3 100 fps RNN frames that completed during this hop. 0.0 when the
+    # analyzer runs without the model.
+    beat_activation: float = 0.0
 
     # Amplitude
     rms: float = 0.0  # Root mean square energy (normalized 0-1)
@@ -85,11 +89,21 @@ class AudioAnalyzer:
         fft_size: int = 2048,
         bass_boost: float = 2.0,
         hop_size: int = 1024,
+        use_beat_rnn: bool = False,
     ):
         self.sample_rate = sample_rate
         self.fft_size = fft_size
         self.bass_boost = bass_boost
         self.hop_size = hop_size
+
+        # Learned beat activation (optional; the weights are CC BY-NC-SA, see
+        # audio/models/LICENSE). Runs its own 100 fps front-end on the raw samples.
+        self._beat_rnn = None
+        if use_beat_rnn:
+            from .beat_rnn import MODEL_PATH, BeatActivationRNN
+
+            if MODEL_PATH.exists():
+                self._beat_rnn = BeatActivationRNN(sample_rate)
 
         # Pre-compute Hann window
         self._window = np.hanning(fft_size)
@@ -130,6 +144,11 @@ class AudioAnalyzer:
         self._rms_floor = 1e-4  # Minimum RMS to avoid division by zero in silence
         self._rms_relative_floor = 0.25  # Range floor as a fraction of the window peak
 
+    @property
+    def beat_rnn_available(self) -> bool:
+        """True when the learned beat activation is computed for every frame."""
+        return self._beat_rnn is not None
+
     def analyze(self, frame: np.ndarray) -> AudioFeatures:
         """
         Analyze a single audio frame.
@@ -142,6 +161,11 @@ class AudioAnalyzer:
             AudioFeatures with all extracted features.
         """
         features = AudioFeatures()
+
+        if self._beat_rnn is not None:
+            activations = self._beat_rnn.push(frame)
+            if activations:
+                features.beat_activation = max(a for _, a in activations)
 
         # Amplitude features (from raw frame, before windowing)
         raw_rms = float(np.sqrt(np.mean(frame**2)))
@@ -342,6 +366,8 @@ class AudioAnalyzer:
         self._stft_buffer = np.zeros(self.fft_size)
         self._prev_magnitude = None
         self._prev_mel_magnitude = None
+        if self._beat_rnn is not None:
+            self._beat_rnn.reset()
         self._band_max = np.ones(7) * 1e-6
         self._mel_max = np.ones(self._n_mel_bands) * 1e-6
         self._rms_history.clear()

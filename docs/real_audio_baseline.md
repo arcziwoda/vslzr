@@ -89,7 +89,39 @@ by the activation), detector level only:
 The tracker is not the bottleneck; the onset function is. Devotion is capped by the
 reference switching metrical level; fred_again by the reference itself.
 
-## Options (decision pending)
+## Decision and result: learned activation in the app (2026-09-06)
+
+Option 1 taken (non-commercial project; weights redistributed with their CC BY-NC-SA
+notice in `src/hue_visualizer/audio/models/LICENSE`, README updated). `audio/beat_rnn.py`
+is a numpy port of madmom's online front-end and LSTM ensemble; it matches madmom's
+activation to 7e-5 max abs diff on a 60 s excerpt and costs ~0.11 ms per 100 fps frame
+including the front-end (~1% of one core). 48 kHz input goes through a streaming polyphase
+resampler (activation correlation 0.9997 with the 44.1 kHz run). `AudioFeatures.beat_activation`
+carries the per-hop maximum; `BeatDetector(onset_source="rnn")` uses it as ODF and strength,
+`Settings.beat_onset_source` (default `rnn`) selects it, falling back to `spectral` when the
+model file is missing. The strong-onset level (0.4) is insensitive on the activation (0.3-0.5
+within 0.01 F).
+
+| track | engine F step14 | engine F rnn1 | FP/min step14 -> rnn1 | metric F rnn1 |
+|---|---|---|---|---|
+| bours_blind_pick | 0.293 | 0.934 | 60.5 -> 10.0 | 0.961 |
+| dimension_devotion | 0.718 | 0.802 | 41.4 -> 33.0 | 0.810 |
+| discobitch | 0.712 | 0.991 | 21.4 -> 0.9 | 0.964 |
+| dj_gigola | 0.118 | 0.854 | 93.3 -> 21.3 | 0.849 |
+| fred_again (unreliable GT) | 0.159 | 0.770 | 95.6 -> 29.7 | 0.659 |
+| prodigy | 0.563 | 0.774 | 54.6 -> 25.7 | 0.808 |
+
+Synthetic scenarios with the RNN (`rnn1`): techno/house/breakdown 0.996 end-to-end, jitter
+0.962, silence 0.925; the synthetic two-step DnB drops to 0.901 (0.934 spectral) and trap to
+0.738 (0.784): the activation on the synthetic DnB pattern is weak on the beats without a hit,
+while the real DnB track improved. End-to-end flashes are 15-40 ms late (activation peaks
+slightly after the spectral onset); the calibration slider absorbs it.
+
+Remaining misses are concentrated: prodigy 5-95 s (intro; the reference itself has 0.36-0.44
+tracker agreement there), devotion intro/outro (reference at 88 BPM), gigola 185-215 s and
+fred_again 155-185 s (reference agreement 0.53 / 0.00 in those windows).
+
+## Options considered before the decision
 
 1. Port madmom's online beat RNN to numpy inside the app (feature pipeline: three STFT
    sizes at 100 fps, log-filtered spectrogram + first differences; model: small LSTM

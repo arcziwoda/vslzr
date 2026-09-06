@@ -71,10 +71,12 @@ def run_detector(
     bpm_max: float,
     cooldown_ms: float,
     bass_boost: float,
+    onset_source: str = "rnn",
 ) -> dict:
     """Drive the pipeline frame by frame and collect the three beat streams."""
     analyzer = AudioAnalyzer(
-        sample_rate=sr, fft_size=FFT_SIZE, hop_size=HOP_SIZE, bass_boost=bass_boost
+        sample_rate=sr, fft_size=FFT_SIZE, hop_size=HOP_SIZE, bass_boost=bass_boost,
+        use_beat_rnn=onset_source == "rnn",
     )
     detector = BeatDetector(
         sample_rate=sr,
@@ -82,6 +84,7 @@ def run_detector(
         cooldown_ms=cooldown_ms,
         bpm_min=bpm_min,
         bpm_max=bpm_max,
+        onset_source=onset_source,
     )
 
     frame_dur = HOP_SIZE / sr
@@ -214,7 +217,8 @@ def score_stream(reference: np.ndarray, estimated: np.ndarray, duration: float) 
     return out
 
 
-def run_scenario(name: str, seed: int, humanize_ms: float, configs: list[dict]) -> dict:
+def run_scenario(name: str, seed: int, humanize_ms: float, configs: list[dict],
+                 onset_source: str = "rnn") -> dict:
     audio, reference, meta = generate(name, seed=seed, humanize_ms=humanize_ms)
     duration = len(audio) / SAMPLE_RATE
     runs = []
@@ -227,6 +231,7 @@ def run_scenario(name: str, seed: int, humanize_ms: float, configs: list[dict]) 
             bpm_max=config["bpm_max"],
             cooldown_ms=config["cooldown_ms"],
             bass_boost=config["bass_boost"],
+            onset_source=onset_source,
         )
         runs.append({
             "config": config,
@@ -347,6 +352,8 @@ def main() -> None:
                         help="Skip the genre-preset pass")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--humanize-ms", type=float, default=0.0)
+    parser.add_argument("--onset-source", choices=("rnn", "spectral"), default="rnn",
+                        help="Onset detection function (default: rnn)")
     parser.add_argument("--out-dir", default=None,
                         help="Output directory (default: tools/benchmark_results/synth)")
     args = parser.parse_args()
@@ -366,7 +373,8 @@ def main() -> None:
     for name in names:
         _, _, meta = generate(name, seed=args.seed, humanize_ms=args.humanize_ms)
         configs = build_configs(args, meta["preset"])
-        result = run_scenario(name, args.seed, args.humanize_ms, configs)
+        result = run_scenario(name, args.seed, args.humanize_ms, configs,
+                              onset_source=args.onset_source)
         result["tag"] = args.tag
         print_scenario_table(result)
         results.append(result)

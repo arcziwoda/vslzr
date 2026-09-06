@@ -1,0 +1,46 @@
+{
+  "scenario": "dnb_174",
+  "description": "Two-step DnB with Reese bass; ground truth is the quarter grid",
+  "true_bpm": null,
+  "preset": "dnb",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.7344,
+      "cemgil": 0.6124,
+      "p_score": 0.7107,
+      "goto": 0.0,
+      "cmlc": 0.1069,
+      "cmlt": 0.6101,
+      "amlc": 0.1069,
+      "amlt": 0.6101,
+      "information_gain": 0.2839,
+      "estimated_count": 146,
+      "reference_count": 159,
+      "false_positives_per_min": 37.09,
+      "misses_per_min": 51.27,
+      "mean_signed_error_ms": 21.1,
+      "predictive_active_fraction": 0.948,
+      "trigger_count": 204,
+      "flash_count": 146
+    },
+    "metric": {
+      "f_measure": 0.9007,
+      "cemgil": 0.74,
+      "p_score": 0.8553,
+      "goto": 0.0,
+      "cmlc": 0.0881,
+      "cmlt": 0.7484,
+      "amlc": 0.0881,
+      "amlt": 0.7484,
+      "information_gain": 0.4677,
+      "estimated_count": 143,
+      "reference_count": 159,
+      "false_positives_per_min": 7.64,
+      "misses_per_min": 25.09,
+      "mean_signed_error_ms": 24.0,
+      "predictive_active_fraction": 0.948,
+      "trigger_count": 204,
+      "flash_count": 143
+    }
+  }
+}

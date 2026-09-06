@@ -61,8 +61,9 @@ def run_engine(
     metric_filter: bool,
     num_lights: int = 6,
     band_effects: bool = True,
+    onset_source: str = "rnn",
 ) -> dict:
-    settings = Settings()
+    settings = Settings(beat_onset_source=onset_source)
     pipeline = server_app.AudioPipeline(settings)
     preset = PRESETS[preset_name]
     pipeline.beat_detector.set_cooldown(preset.beat_cooldown_ms)
@@ -157,13 +158,15 @@ def run_engine(
     }
 
 
-def run_scenario(name: str, seed: int, band_effects: bool = True) -> dict:
+def run_scenario(name: str, seed: int, band_effects: bool = True,
+                 onset_source: str = "rnn") -> dict:
     audio, beats, meta = generate(name, seed=seed)
     duration = len(audio) / SAMPLE_RATE
     preset_name = meta["preset"]
     configs = {}
     for label, metric in (("reactive", False), ("metric", True)):
-        out = run_engine(audio, preset_name, metric, band_effects=band_effects)
+        out = run_engine(audio, preset_name, metric, band_effects=band_effects,
+                         onset_source=onset_source)
         intended = np.asarray(out["flashes"]) + LATENCY_COMP_MS / 1000.0
         scores = score_stream(np.asarray(beats), intended, duration)
         scores["predictive_active_fraction"] = out["predictive_active_fraction"]
@@ -200,10 +203,12 @@ def main() -> None:
     parser.add_argument("--tag", default="baseline")
     parser.add_argument("--no-band-effects", action="store_true",
                         help="Suppress kick/snare/hihat onsets reaching the engine (diagnostic)")
+    parser.add_argument("--onset-source", choices=("rnn", "spectral"), default="rnn")
     args = parser.parse_args()
 
     names = [args.scenario] if args.scenario else list(SCENARIOS)
-    results = [run_scenario(n, args.seed, band_effects=not args.no_band_effects) for n in names]
+    results = [run_scenario(n, args.seed, band_effects=not args.no_band_effects,
+                            onset_source=args.onset_source) for n in names]
     print_table(results)
 
     out_dir = Path(__file__).parent / "benchmark_results" / "synth"
