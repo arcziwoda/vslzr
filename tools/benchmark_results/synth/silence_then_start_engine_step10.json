@@ -1,0 +1,46 @@
+{
+  "scenario": "silence_then_start",
+  "description": "5 s silence then techno_130 (cold start)",
+  "true_bpm": null,
+  "preset": "techno",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.3191,
+      "cemgil": 0.1785,
+      "p_score": 0.4314,
+      "goto": 0.0,
+      "cmlc": 0.0392,
+      "cmlt": 0.1078,
+      "amlc": 0.0392,
+      "amlt": 0.1863,
+      "information_gain": 0.1762,
+      "estimated_count": 102,
+      "reference_count": 86,
+      "false_positives_per_min": 108.0,
+      "misses_per_min": 84.0,
+      "mean_signed_error_ms": 0.2,
+      "predictive_active_fraction": 0.816,
+      "trigger_count": 86,
+      "flash_count": 102
+    },
+    "metric": {
+      "f_measure": 1.0,
+      "cemgil": 0.7679,
+      "p_score": 1.0,
+      "goto": 1.0,
+      "cmlc": 1.0,
+      "cmlt": 1.0,
+      "amlc": 1.0,
+      "amlt": 1.0,
+      "information_gain": 0.6538,
+      "estimated_count": 86,
+      "reference_count": 86,
+      "false_positives_per_min": 0.0,
+      "misses_per_min": 0.0,
+      "mean_signed_error_ms": 28.3,
+      "predictive_active_fraction": 0.816,
+      "trigger_count": 86,
+      "flash_count": 86
+    }
+  }
+}

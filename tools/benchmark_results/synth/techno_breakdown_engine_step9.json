@@ -1,0 +1,42 @@
+{
+  "scenario": "techno_breakdown",
+  "description": "Full / breakdown / full; grid continues through the breakdown",
+  "true_bpm": null,
+  "preset": "techno",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.3284,
+      "cemgil": 0.2178,
+      "p_score": 0.3445,
+      "goto": 0.0,
+      "cmlc": 0.0168,
+      "cmlt": 0.0756,
+      "amlc": 0.0244,
+      "amlt": 0.0756,
+      "information_gain": 0.0544,
+      "estimated_count": 82,
+      "reference_count": 119,
+      "false_positives_per_min": 53.45,
+      "misses_per_min": 93.82,
+      "mean_signed_error_ms": 10.3,
+      "predictive_active_fraction": 0.946
+    },
+    "metric": {
+      "f_measure": 0.4027,
+      "cemgil": 0.3222,
+      "p_score": 0.2521,
+      "goto": 0.0,
+      "cmlc": 0.0504,
+      "cmlt": 0.1681,
+      "amlc": 0.0504,
+      "amlt": 0.1681,
+      "information_gain": 0.0838,
+      "estimated_count": 30,
+      "reference_count": 119,
+      "false_positives_per_min": 0.0,
+      "misses_per_min": 97.09,
+      "mean_signed_error_ms": 26.3,
+      "predictive_active_fraction": 0.946
+    }
+  }
+}

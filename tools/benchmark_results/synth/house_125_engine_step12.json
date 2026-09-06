@@ -1,0 +1,46 @@
+{
+  "scenario": "house_125",
+  "description": "House groove with a sidechained pad",
+  "true_bpm": null,
+  "preset": "house",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.8559,
+      "cemgil": 0.5857,
+      "p_score": 0.9565,
+      "goto": 0.0,
+      "cmlc": 0.1043,
+      "cmlt": 0.6957,
+      "amlc": 0.1043,
+      "amlt": 0.6957,
+      "information_gain": 0.4807,
+      "estimated_count": 115,
+      "reference_count": 114,
+      "false_positives_per_min": 18.55,
+      "misses_per_min": 17.45,
+      "mean_signed_error_ms": 17.1,
+      "predictive_active_fraction": 0.952,
+      "trigger_count": 180,
+      "flash_count": 115
+    },
+    "metric": {
+      "f_measure": 0.9956,
+      "cemgil": 0.6253,
+      "p_score": 0.9913,
+      "goto": 1.0,
+      "cmlc": 0.9913,
+      "cmlt": 0.9913,
+      "amlc": 0.9913,
+      "amlt": 0.9913,
+      "information_gain": 0.7827,
+      "estimated_count": 115,
+      "reference_count": 114,
+      "false_positives_per_min": 1.09,
+      "misses_per_min": 0.0,
+      "mean_signed_error_ms": 38.4,
+      "predictive_active_fraction": 0.952,
+      "trigger_count": 180,
+      "flash_count": 115
+    }
+  }
+}

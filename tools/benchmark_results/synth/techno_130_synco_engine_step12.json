@@ -1,0 +1,46 @@
+{
+  "scenario": "techno_130_synco",
+  "description": "techno_130 + syncopated perc on the 16th before each kick",
+  "true_bpm": null,
+  "preset": "techno",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.3435,
+      "cemgil": 0.2936,
+      "p_score": 0.3287,
+      "goto": 0.0,
+      "cmlc": 0.028,
+      "cmlt": 0.1469,
+      "amlc": 0.028,
+      "amlt": 0.1469,
+      "information_gain": 0.153,
+      "estimated_count": 143,
+      "reference_count": 119,
+      "false_positives_per_min": 106.91,
+      "misses_per_min": 80.73,
+      "mean_signed_error_ms": -3.7,
+      "predictive_active_fraction": 0.946,
+      "trigger_count": 191,
+      "flash_count": 143
+    },
+    "metric": {
+      "f_measure": 0.9958,
+      "cemgil": 0.5496,
+      "p_score": 0.9917,
+      "goto": 1.0,
+      "cmlc": 0.9917,
+      "cmlt": 0.9917,
+      "amlc": 0.9917,
+      "amlt": 0.9917,
+      "information_gain": 0.6776,
+      "estimated_count": 120,
+      "reference_count": 119,
+      "false_positives_per_min": 1.09,
+      "misses_per_min": 0.0,
+      "mean_signed_error_ms": 43.7,
+      "predictive_active_fraction": 0.946,
+      "trigger_count": 191,
+      "flash_count": 120
+    }
+  }
+}

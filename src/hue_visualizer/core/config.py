@@ -140,6 +140,13 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
     )
+    metric_beat_filter: bool = Field(
+        default=True,
+        description="Gate reactive beat flashes on PLL-validated onsets (is_metric_beat) "
+        "instead of raw onsets. Raw onsets flash on hi-hats, claps and syncopated hits; "
+        "the metric filter only passes onsets where the tempo tracker expects a beat. "
+        "Can be toggled at runtime from the UI.",
+    )
 
     # Generative Layer Configuration (Task 1.1)
     generative_hue_cycle_period: float = Field(

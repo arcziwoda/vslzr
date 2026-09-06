@@ -246,6 +246,10 @@ Additional findings made while fixing, not in the original list:
 | F20 | `beat_detector.py` | PI loop hunted +-1.5 BPM around the true tempo with phase errors of +-20 ms (period gains too high); autocorrelation lag quantization gave 129.2 for 130 BPM. Gains lowered, peaks parabolically interpolated, agents anchored to the autocorrelation period. |
 | F21 | `beat_detector.py` | During the rewrite a stale duplicate `_sync_best_agent` (syncing from the raw top score) shadowed the new one; caught by the unit-test sim. |
 
+| F22 | `engine.py:tick` | The 3 Hz flash limiter was shared by beat flashes and the per-band overlays (bass pulse, hi-hat sparkle). A sparkle 200 ms before the kick blocked the beat flash: end-to-end only 48 of 119 validated triggers produced a flash on techno. Beat/drop flashes are now limited against the previous beat flash only; overlays yield to the beat. |
+| F23 | `engine.py`, `core/config.py` | The metric filter defaulted to OFF, i.e. the production path was raw onsets + snare flashes (100+ false flashes/min end-to-end on the techno scenario). New `Settings.metric_beat_filter` (default ON) is applied at startup; the UI toggle still overrides at runtime. |
+| F24 | `beat_detector.py` | With no evidence the normalization reference decays to its floor and a flat, non-zero ODF creeps above `mean + k std` (std = 0), producing onsets every 60 ms that confirmed and dragged the agents. Threshold gets a `1.2 x mean` term; agents are only touched by onsets when the onset is strong or evidence is recent. |
+
 Synthetic benchmark, metric stream (`is_metric_beat`), genre presets, baseline vs final:
 
 ```
@@ -259,10 +263,25 @@ techno_breakdown    0.500 -> 0.774     0.028 -> 0.328        82.9 -> 6.5        
 silence_then_start  0.511 -> 0.994     0.039 -> 0.988        81.0 -> 0.0           129.9 (130)
 ```
 
-Predicted stream (what drives the lights when confidence >= 0.6), presets, final: dnb F 0.997
-CMLc 0.994; trap F 0.825; breakdown F 0.870 (CMLc 0.54: ~0.2% period error accumulates over
-20 s of silence). Mean confidence after 5 s is 0.89-1.00 in every preset run (baseline 0.25-0.34,
-so the predictive path was never active).
+End-to-end (`tools/engine_benchmark.py`: real `AudioPipeline` glue at 50 Hz, `EffectEngine.tick`,
+scored on the ticks where a beat flash starts, 60 ms latency compensation modelled), genre
+presets, final code:
+
+```
+scenario            engine      F      CMLc   FP/min  Miss/min
+techno_130          reactive    0.368  0.028  102.5   77.5      <- the old default path
+techno_130          metric      0.996  0.992    1.1    0.0
+techno_130_synco    metric      0.996  0.992    1.1    0.0
+house_125           metric      0.996  0.991    1.1    0.0
+dnb_174             metric      0.944  0.126    1.1   17.4
+trap_70             metric      0.800  0.281   12.0   15.3
+techno_breakdown    metric      0.929  0.542    9.8    8.7
+silence_then_start  metric      0.902  0.897   13.5   12.0
+```
+
+Mean confidence after 5 s is 0.89-1.00 in every preset run (baseline 0.25-0.34, so the
+predictive path was never active before). Flashes land ~40 ms after the beat on average in the
+benchmark; in production the latency compensation and calibration slider absorb that offset.
 
 Remaining, by design or deferred:
 
@@ -273,5 +292,8 @@ Remaining, by design or deferred:
   breakdowns). The predictive stream covers these.
 - F12 (bass boost clip at 1.5) and F13 (STFT overlap only correct for `hop == fft/2`) are
   unchanged; both are outside the beat path's critical behaviour now that the ODF normalizes.
+- The predictive path fires more than once per beat when the prediction shifts by > 50 ms
+  within a beat (agent switch or capture); the flash limiter absorbs the duplicate (1.1 FP/min).
+  Tightening `is_new_prediction` to a fraction of the period would remove it.
 - No real annotated audio yet. The synthetic scenarios are exact but idealized; the next step
   is 3-5 real tracks with hand-corrected beat annotations on 30 s excerpts.

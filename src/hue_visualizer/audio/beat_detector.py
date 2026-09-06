@@ -15,7 +15,7 @@ Architecture (based on beat_detection_research_2026_03.md):
 
 import time
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -40,9 +40,15 @@ class BeatAgent:
     score: float = 1.0  # Leaky hit count, see class docstring
     consecutive_misses: int = 0
     born: float = 0.0  # Timestamp the agent was seeded
+    # Confirmed onsets as (beat index, time) for the least-squares period fit
+    confirmations: deque = field(default_factory=lambda: deque(maxlen=16))
+    beat_index: int = 0
+    last_confirmation: float = 0.0
 
 
 AGENT_SCORE_DECAY = 0.9
+AGENT_LS_MIN_POINTS = 6  # Confirmations needed before the LS period fit is used
+AGENT_LS_GAIN = 0.3  # Pull of the agent period toward the LS estimate per confirmation
 AGENT_GRACE_BEATS = 4.0
 AGENT_SWITCH_MARGIN = 1.25  # Challenger must beat the current best by 25%
 
@@ -188,10 +194,10 @@ class BeatDetector:
         self._pll_kp: float = 0.25  # Phase correction gain
         self._pll_period_alpha: float = 0.02  # Period correction strength
         self._pll_ki: float = 0.005  # Integral gain
-        # Agents near the autocorrelation tempo are pulled toward it every
-        # housekeeping cycle: the autocorrelation is the better period estimator,
-        # the PLL only has to hold phase and fine-tune
-        self._period_anchor_gain: float = 0.1
+        # Agents near the autocorrelation tempo are pulled gently toward it every
+        # housekeeping cycle (coarse anchor); the least-squares fit over confirmed
+        # onsets provides the fine period estimate
+        self._period_anchor_gain: float = 0.02
 
         # Synced from best agent (for downstream consumers)
         self._pll_phase: float = 0.0
@@ -291,11 +297,15 @@ class BeatDetector:
         if len(self._odf_history) < 10:
             return info
 
-        # Adaptive threshold: mean + k*std over ~1 s, with an absolute floor
+        # Adaptive threshold: mean + k*std over ~1 s, with an absolute floor and
+        # a relative margin so a flat ODF creeping up as the normalization
+        # reference decays cannot register as a stream of onsets
         odf_arr = np.fromiter(self._odf_history, dtype=float, count=len(self._odf_history))
+        odf_mean = float(np.mean(odf_arr))
         threshold = max(
             self._odf_threshold_floor,
-            float(np.mean(odf_arr) + self._odf_threshold_sigmas * np.std(odf_arr)),
+            odf_mean + self._odf_threshold_sigmas * float(np.std(odf_arr)),
+            1.2 * odf_mean,
         )
 
         # An onset is a rising edge of the ODF above threshold; the same transient
@@ -326,8 +336,11 @@ class BeatDetector:
             aligned = self._onset_aligned_with_best()
 
             # Agents are confirmed with the onset strength as weight, so dense
-            # weak onsets (hats, 16th bass) cannot outscore kicks.
-            self._correct_agents_on_beat(now, strong_val)
+            # weak onsets (hats, 16th bass) cannot outscore kicks. Without recent
+            # evidence (breakdown, pause) weak onsets do not touch the agents at
+            # all: the first strong onset re-engages them.
+            if strong_val >= self._strong_onset_level or self._has_recent_evidence(now):
+                self._correct_agents_on_beat(now, strong_val)
 
             # Raw beat stream: onset past the raw cooldown.
             if (now - self._last_beat_time) >= self.cooldown_sec:
@@ -522,6 +535,7 @@ class BeatDetector:
                 # Onset confirms this agent's prediction
                 agent.score += weight
                 agent.consecutive_misses = 0
+                self._refine_period_least_squares(agent, now)
 
             # Proportional phase correction
             agent.phase -= self._pll_kp * phase_error
@@ -537,6 +551,25 @@ class BeatDetector:
 
             # Clamp period
             agent.period = max(period_min, min(period_max, agent.period))
+
+    @staticmethod
+    def _refine_period_least_squares(agent: BeatAgent, now: float) -> None:
+        """Fit beat time vs beat index over the agent's recent confirmations and
+        pull the period toward the slope. A 4 s autocorrelation window resolves
+        tempo to ~0.5%; 16 confirmed beats resolve it to ~0.1%, which is what a
+        20 s breakdown needs to freewheel without drifting off the grid."""
+        if agent.last_confirmation > 0:
+            steps = int(round((now - agent.last_confirmation) / agent.period))
+            agent.beat_index += max(1, steps)
+        agent.last_confirmation = now
+        agent.confirmations.append((agent.beat_index, now))
+        if len(agent.confirmations) < AGENT_LS_MIN_POINTS:
+            return
+        idx = np.fromiter((k for k, _ in agent.confirmations), dtype=float)
+        times = np.fromiter((t for _, t in agent.confirmations), dtype=float)
+        slope = float(np.polyfit(idx, times, 1)[0])
+        if slope > 0 and abs(slope - agent.period) / agent.period < 0.05:
+            agent.period += AGENT_LS_GAIN * (slope - agent.period)
 
     def _advance_agents(self, now: float) -> None:
         """Advance phase of all agents by one frame. On phase wrap (a prediction)

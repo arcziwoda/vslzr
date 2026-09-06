@@ -672,6 +672,8 @@ async def lifespan(app: FastAPI):
             generative_breathing_max=settings.generative_breathing_max,
         )
 
+    # Reactive trigger gating (metric filter) from config
+    effect_engine.set_metric_filter(settings.metric_beat_filter)
     # Task 2.6: Apply calibration delay from config
     if settings.calibration_delay_ms > 0:
         effect_engine.set_calibration_delay(settings.calibration_delay_ms)

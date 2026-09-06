@@ -559,6 +559,11 @@ class EffectEngine:
         # When False, fall back to BeatInfo.is_beat (raw onset past cooldown).
         # Default OFF for A/B testing — toggle via UI to compare with old behavior.
         # Once benchmarked positive, flip default to True in a follow-up.
+        # Engine default is the raw reactive path (unit tests drive is_beat
+        # directly); the server enables the metric filter from
+        # Settings.metric_beat_filter, default ON: with raw onsets the synthetic
+        # end-to-end benchmark shows 100+ false flashes/min on techno, with the
+        # filter ~0 (tools/engine_benchmark.py)
         self._use_metric_filtered_beats: bool = False
 
         # --- Section detection state (Task 1.3) ---
@@ -672,10 +677,15 @@ class EffectEngine:
         for light in self._lights:
             light.flash_onset_this_tick = False
 
+        # Flash rate limiting: beat/drop flashes are limited against the previous
+        # beat/drop flash only (_last_flash_time). Per-band overlays (bass pulse,
+        # sparkle) are limited against any flash (_last_any_flash_time), so they
+        # yield to the beat instead of starving it: a hi-hat sparkle 200 ms before
+        # the kick used to block the beat flash through the shared limiter.
         # DROP: fire a massive flash on transition (all lights full brightness)
         if self._drop_flash_pending:
             self._drop_flash_pending = False
-            if (now - self._last_any_flash_time) >= self._min_flash_interval:
+            if (now - self._last_flash_time) >= self._min_flash_interval:
                 self._last_flash_time = now
                 self._last_any_flash_time = now
                 for light in self._lights:
@@ -697,7 +707,7 @@ class EffectEngine:
             # BUILDUP: amplify beat flash as buildup progresses
             if section.section == Section.BUILDUP:
                 flash_strength = min(1.0, flash_strength * (1.0 + 0.5 * section.intensity))
-            if (now - self._last_any_flash_time) >= self._min_flash_interval:
+            if (now - self._last_flash_time) >= self._min_flash_interval:
                 self._last_flash_time = now
                 self._last_any_flash_time = now
                 # Task 1.13: Only flash active lights when effects_size < 1.0

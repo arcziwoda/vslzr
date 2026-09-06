@@ -1,0 +1,46 @@
+{
+  "scenario": "techno_130",
+  "description": "Straight 4/4 techno with rolling 16th bass",
+  "true_bpm": null,
+  "preset": "techno",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.3678,
+      "cemgil": 0.3127,
+      "p_score": 0.3803,
+      "goto": 0.0,
+      "cmlc": 0.0282,
+      "cmlt": 0.2113,
+      "amlc": 0.0282,
+      "amlt": 0.2113,
+      "information_gain": 0.131,
+      "estimated_count": 142,
+      "reference_count": 119,
+      "false_positives_per_min": 102.55,
+      "misses_per_min": 77.45,
+      "mean_signed_error_ms": 6.5,
+      "predictive_active_fraction": 0.946,
+      "trigger_count": 192,
+      "flash_count": 141
+    },
+    "metric": {
+      "f_measure": 0.9958,
+      "cemgil": 0.5519,
+      "p_score": 0.9917,
+      "goto": 1.0,
+      "cmlc": 0.9917,
+      "cmlt": 0.9917,
+      "amlc": 0.9917,
+      "amlt": 0.9917,
+      "information_gain": 0.6729,
+      "estimated_count": 120,
+      "reference_count": 119,
+      "false_positives_per_min": 1.09,
+      "misses_per_min": 0.0,
+      "mean_signed_error_ms": 43.6,
+      "predictive_active_fraction": 0.946,
+      "trigger_count": 192,
+      "flash_count": 120
+    }
+  }
+}
