@@ -26,11 +26,12 @@ from .analyzer import AudioFeatures
 class BeatAgent:
     """A competing beat tracking hypothesis with PI-PLL.
 
-    score is a leaky hit count: decays by AGENT_SCORE_DECAY on every prediction
-    (phase wrap) and gains +1 on every confirmed onset. A perfect agent settles at
-    1 / (1 - decay) = 10; an agent confirmed on a fraction h of its predictions at
-    10h. New agents inherit 0.9x the best score (IBT) and are protected from
-    pruning for AGENT_GRACE_BEATS of their own period.
+    score is a leaky weighted hit count: decays by AGENT_SCORE_DECAY on every
+    informative prediction (a phase wrap with a strong onset somewhere in the
+    period) and gains the onset weight on every confirmed onset. A perfect agent
+    settles at 1 / (1 - decay) = 10 times the mean onset weight. New agents
+    inherit 0.9x the best score (IBT) and are protected from pruning for
+    AGENT_GRACE_BEATS of their own period.
     """
 
     period: float  # Seconds between beats
@@ -151,6 +152,10 @@ class BeatDetector:
         self._raw_confidence: float = 0.0
         self._last_weighted_corr: np.ndarray | None = None
         self._last_corr_lag_min: int = self._lag_min
+        # Tempo prior for agent ranking: median of recent estimates, so a single
+        # glitched autocorrelation cycle cannot flip the best agent
+        self._raw_bpm_recent: deque[float] = deque(maxlen=3)
+        self._prior_bpm: float = 0.0
 
         # --- Multi-Agent PLL (Phase-Locked Loop) ---
         # Each agent is a competing beat hypothesis with its own PI-PLL
@@ -160,18 +165,33 @@ class BeatDetector:
         self._initial_agents: int = 5
         self._agent_kill_ratio: float = 0.8  # Kill below 80% of best score (after grace)
         self._agent_max_misses: int = 8  # Kill after 8 consecutive misses
-        self._agent_confirmation_window: float = 0.050  # ±50ms
+        self._agent_confirmation_window: float = 0.050  # ±50ms: confirms + scores
+        # Strong onsets inside this fraction of the period (but outside the
+        # confirmation window) pull the phase without scoring, so an agent whose
+        # period is slightly off re-captures the beat instead of losing lock.
+        self._agent_capture_fraction: float = 0.25
+        # "Strong" = kick-like relative to the loudest transient of the last
+        # minutes (immune to the 12 s normalization creep during breakdowns).
+        self._strong_onset_level: float = 0.4
         # Score at which an agent counts as fully reliable (a leaky score of 4
         # is ~40% weighted hit rate, which sparse patterns such as half-time
         # trap or two-step DnB reach; four-on-the-floor sits near 8-10).
         self._score_ref: float = 4.0
         self._trust_threshold: float = 0.5  # quality*agreement needed to gate onsets
-        self._quality_held: float = 0.0  # tracking quality frozen while coasting
+        self._quality_held: float = 0.0  # last tracking quality measured with evidence
+        self._quality_current: float = 0.0  # quality used this frame (live or held)
+        # Without a strong onset in this window there is no evidence to seed,
+        # re-rank or re-weight agents on (breakdowns, pauses)
+        self._evidence_window: float = 3.0
 
         # PI-PLL gains (applied to all agents)
         self._pll_kp: float = 0.25  # Phase correction gain
-        self._pll_period_alpha: float = 0.05  # Period correction strength
-        self._pll_ki: float = 0.02  # Integral gain
+        self._pll_period_alpha: float = 0.02  # Period correction strength
+        self._pll_ki: float = 0.005  # Integral gain
+        # Agents near the autocorrelation tempo are pulled toward it every
+        # housekeeping cycle: the autocorrelation is the better period estimator,
+        # the PLL only has to hold phase and fine-tune
+        self._period_anchor_gain: float = 0.1
 
         # Synced from best agent (for downstream consumers)
         self._pll_phase: float = 0.0
@@ -258,6 +278,12 @@ class BeatDetector:
         bass_norm = bass_diff / (self._bass_diff_ref + 1e-9)
         flux_norm = flux / (self._flux_ref + 1e-9)
         onset_val = float(np.clip(0.5 * (bass_norm + flux_norm), 0.0, 1.0))
+        # Absolute-ish strength against the slow peak: drives agent scoring,
+        # phase capture and coasting, where breakdown pad pumping must not count
+        strong_val = float(np.clip(
+            0.5 * (bass_diff / (self._bass_diff_peak + 1e-9) + flux / (self._flux_peak + 1e-9)),
+            0.0, 1.0,
+        ))
 
         self._onset_buffer.append(onset_val)
         self._odf_history.append(onset_val)
@@ -284,8 +310,8 @@ class BeatDetector:
             self._last_onset_time = now
             strength = onset_val
 
-            # Track strong onsets for coasting behavior
-            if strength > 0.3:
+            # Track strong (kick-like) onsets for coasting and miss counting
+            if strong_val >= self._strong_onset_level:
                 self._last_strong_onset_time = now
 
             # Confirm pending predictions (any onset within tolerance counts)
@@ -299,11 +325,9 @@ class BeatDetector:
             # reflects where the PLL expected the beat to land.
             aligned = self._onset_aligned_with_best()
 
-            # Agents are confirmed with the ODF value as weight (relative to the
-            # loudest recent transient), so dense weak onsets (hats, 16th bass)
-            # cannot outscore kicks.
-            if strength > 0.2:
-                self._correct_agents_on_beat(now, strength)
+            # Agents are confirmed with the onset strength as weight, so dense
+            # weak onsets (hats, 16th bass) cannot outscore kicks.
+            self._correct_agents_on_beat(now, strong_val)
 
             # Raw beat stream: onset past the raw cooldown.
             if (now - self._last_beat_time) >= self.cooldown_sec:
@@ -336,12 +360,17 @@ class BeatDetector:
         buf_len = len(self._onset_buffer)
         if buf_len >= self._lag_max + 10 and self._frame_count % self._acorr_interval == 0:
             self._estimate_bpm_autocorrelation()
-            self._seed_agents_from_autocorrelation(now)
-            self._merge_duplicate_agents()
-            self._prune_agents(now)
+            if self._has_recent_evidence(now):
+                self._raw_bpm_recent.append(self._raw_bpm)
+                self._prior_bpm = float(np.median(self._raw_bpm_recent))
+                self._anchor_agent_periods()
+                self._seed_agents_from_autocorrelation(now)
+                self._merge_duplicate_agents()
+                self._prune_agents(now)
 
         # --- 4. Pick the best agent (with hysteresis) and sync output vars ---
-        self._select_best_agent()
+        if self._has_recent_evidence(now):
+            self._select_best_agent()
         self._sync_best_agent()
 
         # --- 5. Output: combine PLL + confidence gating + smoothing ---
@@ -356,17 +385,18 @@ class BeatDetector:
         sidechain_detected = self._detect_sidechain()
 
         # Confidence = best agent quality x tempo agreement with the
-        # autocorrelation x coasting multiplier. Quality is frozen while coasting
-        # so a breakdown decays confidence on the coasting schedule, not on the
-        # agent's score. Prediction ratio and autocorrelation SNR are kept as
-        # diagnostics only.
+        # autocorrelation x coasting multiplier. Quality is held at its last
+        # evidence-backed value when strong onsets stop, so a breakdown decays
+        # confidence on the coasting schedule. Prediction ratio and
+        # autocorrelation SNR are kept as diagnostics only.
         self._update_prediction_confidence(now)
         self._update_coasting(now, sidechain_detected)
-        if self._coasting:
-            quality = self._quality_held
-        else:
+        if self._has_recent_evidence(now):
             quality = self._tracking_quality()
             self._quality_held = quality
+        else:
+            quality = self._quality_held
+        self._quality_current = quality
         agreement = self._agent_agreement_factor()
         self._confidence = quality * agreement * self._coast_confidence_mult
         self._locked = self._confidence > 0.8
@@ -410,10 +440,14 @@ class BeatDetector:
         info.time_since_beat = now - self._last_beat_time
 
         # Predict the next beat from the best agent's phase, not from the last
-        # raw onset: false onsets must not move the prediction.
+        # raw onset: false onsets must not move the prediction. Agent phases
+        # were already advanced by one frame above, so they describe the state
+        # at now + frame_dur.
         best = self._best_agent
         if best is not None and best.period > 0:
-            info.predicted_next_beat = now + (1.0 - best.phase) * best.period
+            info.predicted_next_beat = (
+                now + self._frame_dur + (1.0 - best.phase) * best.period
+            )
 
         return info
 
@@ -427,13 +461,19 @@ class BeatDetector:
         return float(np.clip(best.score / self._score_ref, 0.0, 1.0))
 
     def _pll_trusted(self) -> bool:
-        """True when the best agent is old enough and reliable enough (including
-        while coasting on its frozen quality) to gate onsets."""
+        """True when the best agent is reliable enough (live, or held while
+        coasting) to gate onsets."""
         best = self._best_agent
         if best is None or best.period <= 0:
             return False
-        quality = self._quality_held if self._coasting else self._tracking_quality()
-        return quality * self._agent_agreement_factor() >= self._trust_threshold
+        return self._quality_current * self._agent_agreement_factor() >= self._trust_threshold
+
+    def _has_recent_evidence(self, now: float) -> bool:
+        """True if a strong onset happened within the evidence window."""
+        return (
+            self._last_strong_onset_time > 0
+            and (now - self._last_strong_onset_time) <= self._evidence_window
+        )
 
     def _onset_aligned_with_best(self) -> bool:
         """True if the current onset lands within the confirmation window of the
@@ -447,9 +487,14 @@ class BeatDetector:
         return abs(phase_error * best.period) <= self._agent_confirmation_window
 
     def _correct_agents_on_beat(self, now: float, weight: float = 1.0) -> None:
-        """Correct all agents when an onset is detected. Agents whose predicted
-        phase aligns with the onset get a score boost (scaled by onset weight)
-        and a PI correction."""
+        """Correct all agents when an onset is detected.
+
+        Inside the confirmation window: score boost (scaled by onset weight),
+        miss counter reset, PI phase/period correction. Strong onsets inside the
+        wider capture window: the same PI correction without scoring, so a
+        slightly mis-tuned agent re-acquires the beat (and fixes its period)
+        instead of drifting out of lock.
+        """
         period_min = 60.0 / self.bpm_max
         period_max = 60.0 / self.bpm_min
 
@@ -464,25 +509,34 @@ class BeatDetector:
 
             time_error = abs(phase_error * agent.period)
 
-            if time_error <= self._agent_confirmation_window:
+            confirmed = time_error <= self._agent_confirmation_window
+            captured = (
+                not confirmed
+                and weight >= self._strong_onset_level
+                and time_error <= self._agent_capture_fraction * agent.period
+            )
+            if not (confirmed or captured):
+                continue
+
+            if confirmed:
                 # Onset confirms this agent's prediction
                 agent.score += weight
                 agent.consecutive_misses = 0
 
-                # Proportional phase correction
-                agent.phase -= self._pll_kp * phase_error
+            # Proportional phase correction
+            agent.phase -= self._pll_kp * phase_error
 
-                # Period correction
-                timing_error_sec = phase_error * agent.period
-                agent.period += self._pll_period_alpha * timing_error_sec
+            # Period correction
+            timing_error_sec = phase_error * agent.period
+            agent.period += self._pll_period_alpha * timing_error_sec
 
-                # Integral correction (PI-PLL)
-                agent.integral_error += phase_error
-                agent.integral_error = max(-2.0, min(2.0, agent.integral_error))
-                agent.period += self._pll_ki * agent.integral_error * agent.period
+            # Integral correction (PI-PLL)
+            agent.integral_error += phase_error
+            agent.integral_error = max(-2.0, min(2.0, agent.integral_error))
+            agent.period += self._pll_ki * agent.integral_error * agent.period
 
-                # Clamp period
-                agent.period = max(period_min, min(period_max, agent.period))
+            # Clamp period
+            agent.period = max(period_min, min(period_max, agent.period))
 
     def _advance_agents(self, now: float) -> None:
         """Advance phase of all agents by one frame. On phase wrap (a prediction)
@@ -499,19 +553,22 @@ class BeatDetector:
             if agent.phase >= 1.0:
                 overshoot = agent.phase - 1.0
                 agent.phase %= 1.0
-                agent.score *= AGENT_SCORE_DECAY
 
                 if agent is self._best_agent:
                     predicted_time = now - overshoot * agent.period
                     self._prediction_window.append((predicted_time, False))
 
-                # No onset near this prediction (a late onset within the window
-                # will still confirm and reset the counter)
-                time_since_onset = (
-                    now - self._last_onset_time if self._last_onset_time > 0 else 999.0
-                )
-                if time_since_onset > self._agent_confirmation_window:
-                    agent.consecutive_misses += 1
+                # A prediction is informative only if a strong onset happened
+                # during its period: then the score leaks and, if that onset was
+                # not near the prediction, it counts as a miss. Silence
+                # (breakdown) neither decays nor penalises; the agent freewheels.
+                # A late onset inside the window still confirms and resets.
+                if self._last_strong_onset_time > 0:
+                    since_strong = now - self._last_strong_onset_time
+                    if since_strong <= agent.period:
+                        agent.score *= AGENT_SCORE_DECAY
+                        if since_strong > self._agent_confirmation_window:
+                            agent.consecutive_misses += 1
 
     def _seed_agents_from_autocorrelation(self, now: float) -> None:
         """Seed new agents from the top autocorrelation peaks.
@@ -533,7 +590,7 @@ class BeatDetector:
         candidate_periods = []
         for i in range(1, len(weighted) - 1):
             if weighted[i] > weighted[i - 1] and weighted[i] > weighted[i + 1]:
-                period = (lag_min + i) * self._frame_dur
+                period = (lag_min + self._interpolate_peak(weighted, i)) * self._frame_dur
                 candidate_periods.append((weighted[i], period))
         candidate_periods.sort(reverse=True)
         candidates = candidate_periods[:self._initial_agents]
@@ -596,6 +653,15 @@ class BeatDetector:
     def _phase_distance_sec(phase_a: float, phase_b: float, period: float) -> float:
         d = abs(phase_a - phase_b) % 1.0
         return min(d, 1.0 - d) * period
+
+    def _anchor_agent_periods(self) -> None:
+        """Pull agents within 5% of the autocorrelation tempo toward it."""
+        if self._raw_bpm <= 0:
+            return
+        target = 60.0 / self._raw_bpm
+        for agent in self._agents:
+            if agent.period > 0 and abs(agent.period - target) / target < 0.05:
+                agent.period += self._period_anchor_gain * (target - agent.period)
 
     def _merge_duplicate_agents(self) -> None:
         """Collapse agents that PI tracking has driven to the same tempo and phase
@@ -671,18 +737,18 @@ class BeatDetector:
         """Weight for agent selection: 1.0 at the autocorrelation tempo, falling
         off as a log-Gaussian (sigma ~8%), floored so a much better-scoring agent
         can still win when the autocorrelation estimate is off."""
-        if agent.period <= 0 or self._raw_bpm <= 0:
+        if agent.period <= 0 or self._prior_bpm <= 0:
             return 1.0
-        log_ratio = np.log2((60.0 / agent.period) / self._raw_bpm)
+        log_ratio = np.log2((60.0 / agent.period) / self._prior_bpm)
         return max(0.3, float(np.exp(-0.5 * (log_ratio / 0.08) ** 2)))
 
     def _agent_agreement_factor(self) -> float:
         """Confidence multiplier: 1.0 when the best agent matches the
         autocorrelation tempo, 0.8 for an octave relation, 0.5 otherwise."""
         best = self._best_agent
-        if best is None or best.period <= 0 or self._raw_bpm <= 0:
+        if best is None or best.period <= 0 or self._prior_bpm <= 0:
             return 1.0
-        ratio = (60.0 / best.period) / self._raw_bpm
+        ratio = (60.0 / best.period) / self._prior_bpm
         if abs(ratio - 1.0) < 0.05:
             return 1.0
         if abs(ratio - 2.0) < 0.1 or abs(ratio - 0.5) < 0.025:
@@ -946,14 +1012,15 @@ class BeatDetector:
         self._last_weighted_corr = weighted
         self._last_corr_lag_min = lag_min
 
-        # Find peak
-        peak_idx = np.argmax(weighted)
-        peak_lag = lag_min + peak_idx
+        # Find peak (sub-lag precision via parabolic interpolation)
+        peak_idx = int(np.argmax(weighted))
         peak_val = weighted[peak_idx]
 
         if peak_val < 0.01:
             self._raw_confidence = 0.0
             return
+
+        peak_lag = lag_min + self._interpolate_peak(weighted, peak_idx)
 
         # Convert lag to BPM
         beat_period_sec = peak_lag * self._frame_dur
@@ -969,6 +1036,18 @@ class BeatDetector:
         std_corr = float(np.std(weighted))
         snr = (peak_val - mean_corr) / (std_corr + 1e-10)
         self._raw_confidence = float(np.clip(snr / 5.0, 0, 1))
+
+    @staticmethod
+    def _interpolate_peak(curve: np.ndarray, idx: int) -> float:
+        """Parabolic refinement of a local maximum position (fractional index)."""
+        if idx <= 0 or idx >= len(curve) - 1:
+            return float(idx)
+        y0, y1, y2 = float(curve[idx - 1]), float(curve[idx]), float(curve[idx + 1])
+        denom = y0 - 2.0 * y1 + y2
+        if abs(denom) < 1e-12:
+            return float(idx)
+        offset = 0.5 * (y0 - y2) / denom
+        return idx + float(np.clip(offset, -0.5, 0.5))
 
     def _fix_octave_errors(
         self, bpm: float, correlations: np.ndarray, lag_min: int
@@ -1014,6 +1093,8 @@ class BeatDetector:
         self._raw_bpm = 0.0
         self._raw_confidence = 0.0
         self._last_weighted_corr = None
+        self._raw_bpm_recent.clear()
+        self._prior_bpm = 0.0
         self._agents.clear()
         self._best_agent = None
         self._pll_phase = 0.0
@@ -1042,6 +1123,7 @@ class BeatDetector:
         self._coasting = False
         self._coast_confidence_mult = 1.0
         self._quality_held = 0.0
+        self._quality_current = 0.0
         self._mid_flux_history.clear()
 
     # --- Public setters for genre preset configuration ---
