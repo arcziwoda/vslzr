@@ -43,7 +43,7 @@ class BeatAgent:
 
 AGENT_SCORE_DECAY = 0.9
 AGENT_GRACE_BEATS = 4.0
-AGENT_SWITCH_MARGIN = 1.15  # Challenger must beat the current best by 15%
+AGENT_SWITCH_MARGIN = 1.25  # Challenger must beat the current best by 25%
 
 
 @dataclass
@@ -161,9 +161,12 @@ class BeatDetector:
         self._agent_kill_ratio: float = 0.8  # Kill below 80% of best score (after grace)
         self._agent_max_misses: int = 8  # Kill after 8 consecutive misses
         self._agent_confirmation_window: float = 0.050  # ±50ms
-        # Best agent must have at least this score (~50% hit rate) before its
-        # phase is trusted to gate onsets (is_metric_beat) or drive predictions.
-        self._agent_trust_score: float = 5.0
+        # Score at which an agent counts as fully reliable (a leaky score of 4
+        # is ~40% weighted hit rate, which sparse patterns such as half-time
+        # trap or two-step DnB reach; four-on-the-floor sits near 8-10).
+        self._score_ref: float = 4.0
+        self._trust_threshold: float = 0.5  # quality*agreement needed to gate onsets
+        self._quality_held: float = 0.0  # tracking quality frozen while coasting
 
         # PI-PLL gains (applied to all agents)
         self._pll_kp: float = 0.25  # Phase correction gain
@@ -334,6 +337,7 @@ class BeatDetector:
         if buf_len >= self._lag_max + 10 and self._frame_count % self._acorr_interval == 0:
             self._estimate_bpm_autocorrelation()
             self._seed_agents_from_autocorrelation(now)
+            self._merge_duplicate_agents()
             self._prune_agents(now)
 
         # --- 4. Pick the best agent (with hysteresis) and sync output vars ---
@@ -351,15 +355,20 @@ class BeatDetector:
         self._mid_flux_history.append(mid_flux)
         sidechain_detected = self._detect_sidechain()
 
-        # Confidence: blend autocorrelation SNR + prediction ratio, then scale by
-        # tempo agreement between the best agent and the autocorrelation estimate
+        # Confidence = best agent quality x tempo agreement with the
+        # autocorrelation x coasting multiplier. Quality is frozen while coasting
+        # so a breakdown decays confidence on the coasting schedule, not on the
+        # agent's score. Prediction ratio and autocorrelation SNR are kept as
+        # diagnostics only.
         self._update_prediction_confidence(now)
-        raw_confidence = 0.5 * self._raw_confidence + 0.5 * self._prediction_confidence
-        agreement = self._agent_agreement_factor()
-
-        # Coasting: tiered confidence decay without strong onsets
         self._update_coasting(now, sidechain_detected)
-        self._confidence = raw_confidence * self._coast_confidence_mult * agreement
+        if self._coasting:
+            quality = self._quality_held
+        else:
+            quality = self._tracking_quality()
+            self._quality_held = quality
+        agreement = self._agent_agreement_factor()
+        self._confidence = quality * agreement * self._coast_confidence_mult
         self._locked = self._confidence > 0.8
 
         # BPM smoothing: light EMA on PLL output (multi-agent already provides stability)
@@ -410,14 +419,21 @@ class BeatDetector:
 
     # --- Multi-agent PLL methods ---
 
-    def _pll_trusted(self) -> bool:
-        """True when the best agent has earned enough confirmations to gate onsets."""
+    def _tracking_quality(self) -> float:
+        """0..1: how reliable the best agent is (leaky score / reference)."""
         best = self._best_agent
-        return (
-            best is not None
-            and best.period > 0
-            and best.score >= self._agent_trust_score
-        )
+        if best is None or best.period <= 0:
+            return 0.0
+        return float(np.clip(best.score / self._score_ref, 0.0, 1.0))
+
+    def _pll_trusted(self) -> bool:
+        """True when the best agent is old enough and reliable enough (including
+        while coasting on its frozen quality) to gate onsets."""
+        best = self._best_agent
+        if best is None or best.period <= 0:
+            return False
+        quality = self._quality_held if self._coasting else self._tracking_quality()
+        return quality * self._agent_agreement_factor() >= self._trust_threshold
 
     def _onset_aligned_with_best(self) -> bool:
         """True if the current onset lands within the confirmation window of the
@@ -500,10 +516,12 @@ class BeatDetector:
     def _seed_agents_from_autocorrelation(self, now: float) -> None:
         """Seed new agents from the top autocorrelation peaks.
 
-        New agents are phase-aligned to the last onset (an agent seeded at an
-        arbitrary phase can never be confirmed and would be pruned regardless of
-        whether its tempo is right) and inherit 0.9x the best score (IBT), so
-        they can compete with established agents when the tempo changes.
+        New agents get their phase from a comb search over the onset buffer (the
+        phase that collects the most onset energy at the candidate period), so
+        a syncopated hit cannot anchor the only hypothesis at that tempo, and
+        inherit 0.9x the best score (IBT) so they can compete with established
+        agents. Agents are deduplicated on tempo AND phase: several phase
+        hypotheses at one tempo are allowed and compete on score.
         """
         if self._raw_bpm <= 0 or self._last_weighted_corr is None:
             return
@@ -529,34 +547,95 @@ class BeatDetector:
         inherited = 0.9 * best_score if self._agents else 1.0
 
         for _, period in candidates:
+            if len(self._agents) >= self._max_agents:
+                break
+
+            phase = self._phase_from_onset_buffer(period)
+            if phase is None:
+                if self._last_onset_time <= 0 or (now - self._last_onset_time) >= 2.0 * period:
+                    continue
+                phase = ((now - self._last_onset_time) / period) % 1.0
+
             already_tracked = any(
                 abs(a.period - period) / a.period < 0.05
+                and self._phase_distance_sec(a.phase, phase, period)
+                <= self._agent_confirmation_window
                 for a in self._agents if a.period > 0
             )
-            if already_tracked or len(self._agents) >= self._max_agents:
+            if already_tracked:
                 continue
-
-            phase = 0.0
-            if self._last_onset_time > 0 and (now - self._last_onset_time) < 2.0 * period:
-                phase = ((now - self._last_onset_time) / period) % 1.0
 
             self._agents.append(
                 BeatAgent(period=period, phase=phase, score=inherited, born=now)
             )
 
+    def _phase_from_onset_buffer(self, period_sec: float) -> float | None:
+        """Phase (0=beat) at the newest buffer frame for the given period, chosen
+        as the comb offset that collects the most onset energy in the buffer."""
+        n = len(self._onset_buffer)
+        p_frames = period_sec / self._frame_dur
+        if p_frames < 2.0 or n < 2.0 * p_frames:
+            return None
+        buf = np.fromiter(self._onset_buffer, dtype=float, count=n)
+        best_phi = 0
+        best_sum = -1.0
+        for phi in range(int(np.ceil(p_frames))):
+            count = int((n - 1 - phi) / p_frames) + 1
+            idx = np.round((n - 1 - phi) - np.arange(count) * p_frames).astype(int)
+            idx = idx[idx >= 0]
+            total = float(buf[idx].sum())
+            if total > best_sum:
+                best_sum = total
+                best_phi = phi
+        if best_sum <= 0.0:
+            return None
+        # The last beat was best_phi frames ago
+        return (best_phi * self._frame_dur / period_sec) % 1.0
+
+    @staticmethod
+    def _phase_distance_sec(phase_a: float, phase_b: float, period: float) -> float:
+        d = abs(phase_a - phase_b) % 1.0
+        return min(d, 1.0 - d) * period
+
+    def _merge_duplicate_agents(self) -> None:
+        """Collapse agents that PI tracking has driven to the same tempo and phase
+        (within 5% / one confirmation window) into the higher-scoring one, so the
+        best-agent choice cannot flip between two copies of one hypothesis."""
+        if len(self._agents) < 2:
+            return
+        ordered = sorted(self._agents, key=lambda a: a.score, reverse=True)
+        if self._best_agent in ordered:
+            ordered.remove(self._best_agent)
+            ordered.insert(0, self._best_agent)
+        kept: list[BeatAgent] = []
+        for agent in ordered:
+            duplicate = any(
+                abs(k.period - agent.period) / k.period < 0.05
+                and self._phase_distance_sec(k.phase, agent.phase, k.period)
+                <= self._agent_confirmation_window
+                for k in kept
+            )
+            if not duplicate:
+                kept.append(agent)
+        self._agents = kept
+
     def _prune_agents(self, now: float) -> None:
         """Drop agents with too many consecutive misses, or (once past their
-        grace period) scoring below the kill ratio of the best score."""
+        grace period) ranking below the kill ratio of the best ranked score."""
         if not self._agents:
             return
 
-        best_score = max(a.score for a in self._agents)
+        # Rank with the same tempo prior as selection: a half/double-tempo agent
+        # is confirmed on every one of its predictions and would otherwise
+        # out-score (and kill) the correct agent whenever some beats lack onsets.
+        ranked = {id(a): a.score * self._tempo_prior(a) for a in self._agents}
+        best_ranked = max(ranked.values())
         kept = []
         for agent in self._agents:
             if agent.consecutive_misses >= self._agent_max_misses:
                 continue
             in_grace = (now - agent.born) < AGENT_GRACE_BEATS * agent.period
-            if not in_grace and agent.score < best_score * self._agent_kill_ratio:
+            if not in_grace and ranked[id(agent)] < best_ranked * self._agent_kill_ratio:
                 continue
             kept.append(agent)
         self._agents = kept
@@ -672,14 +751,6 @@ class BeatDetector:
         else:
             self._coast_confidence_mult = 0.5
             self._coasting = True
-
-    def _sync_best_agent(self) -> None:
-        """Sync _pll_period and _pll_phase from the highest-scoring agent."""
-        if self._agents:
-            best = max(self._agents, key=lambda a: a.score)
-            self._pll_period = best.period
-            self._pll_phase = best.phase
-        # If no agents, _pll_period stays at whatever it was (or 0)
 
     def _detect_per_band_onsets(
         self, features: AudioFeatures, now: float, info: BeatInfo
@@ -970,6 +1041,7 @@ class BeatDetector:
         self._last_strong_onset_time = 0.0
         self._coasting = False
         self._coast_confidence_mult = 1.0
+        self._quality_held = 0.0
         self._mid_flux_history.clear()
 
     # --- Public setters for genre preset configuration ---
