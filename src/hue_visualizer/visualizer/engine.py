@@ -682,11 +682,14 @@ class EffectEngine:
                     light.flash_brightness = 1.0  # Max flash for drop
                     light.flash_onset_this_tick = True
 
-        # Regular beat flash (also triggered by snare onsets for bright white flash)
-        if trigger_beat or beat_info.snare_onset:
+        # Regular beat flash. Snare onsets also flash, but only when the metric
+        # filter is off: with the filter on, every flash must come from a
+        # PLL-validated beat, otherwise mid-band transients bypass the filter.
+        snare_flash = beat_info.snare_onset and not self._use_metric_filtered_beats
+        if trigger_beat or snare_flash:
             flash_strength = beat_strength
             # Snare onset without main beat: use snare energy as flash strength
-            if beat_info.snare_onset and not trigger_beat:
+            if snare_flash and not trigger_beat:
                 flash_strength = min(1.0, beat_info.snare_energy * 0.8)
             # Task 2.5: Safe mode reduces flash intensity by 30%
             if self._safe_mode:

@@ -102,6 +102,7 @@ class AudioPipeline:
         self.beat_info = BeatInfo()
         self.section_info = SectionInfo()
         self._pending_beat = False
+        self._pending_metric_beat = False
         self._pending_beat_strength = 0.0
 
         # Per-band onset latching (Task 1.5): latch onsets between output ticks
@@ -162,6 +163,7 @@ class AudioPipeline:
         self.beat_info = BeatInfo()
         self.section_info = SectionInfo()
         self._pending_beat = False
+        self._pending_metric_beat = False
         self._pending_beat_strength = 0.0
         self._pending_kick = False
         self._pending_snare = False
@@ -189,6 +191,8 @@ class AudioPipeline:
                 self._pending_beat_strength = max(
                     self._pending_beat_strength, self.beat_info.beat_strength
                 )
+                if self.beat_info.is_metric_beat:
+                    self._pending_metric_beat = True
 
             # Latch per-band onsets (Task 1.5)
             if self.beat_info.kick_onset:
@@ -232,13 +236,20 @@ class AudioPipeline:
 
         return len(frames) > 0
 
-    def consume_beat(self) -> tuple[bool, float]:
-        """Return and clear pending beat flag."""
+    def consume_beat(self) -> tuple[bool, bool, float]:
+        """Return and clear pending beat flags.
+
+        Returns:
+            (had_beat, had_metric_beat, strength). had_metric_beat is True if any
+            latched onset in this interval was validated by the PLL.
+        """
         had_beat = self._pending_beat
+        had_metric = self._pending_metric_beat
         strength = self._pending_beat_strength
         self._pending_beat = False
+        self._pending_metric_beat = False
         self._pending_beat_strength = 0.0
-        return had_beat, strength
+        return had_beat, had_metric, strength
 
     def consume_band_onsets(self) -> tuple[bool, bool, bool, float, float, float]:
         """Return and clear pending per-band onset flags (Task 1.5).
@@ -392,7 +403,7 @@ async def audio_loop():
 
         if pipeline and pipeline.is_running:
             had_frames = pipeline.process_all()
-            had_beat, beat_strength = pipeline.consume_beat()
+            had_beat, had_metric_beat, beat_strength = pipeline.consume_beat()
             kick, snare, hihat, kick_e, snare_e, hihat_e = pipeline.consume_band_onsets()
 
             output_features = pipeline.consume_features()
@@ -405,6 +416,7 @@ async def audio_loop():
 
                 beat_for_engine = BeatInfo(
                     is_beat=had_beat,
+                    is_metric_beat=had_metric_beat,
                     bpm=pipeline.beat_info.bpm,
                     bpm_confidence=pipeline.beat_info.bpm_confidence,
                     beat_strength=beat_strength,
