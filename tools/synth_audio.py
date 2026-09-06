@@ -380,6 +380,19 @@ def techno_130_synco(seed: int = 0, humanize_ms: float = 0.0, duration: float = 
     return audio, beats, meta
 
 
+def techno_130_jitter(seed: int = 0, humanize_ms: float = 0.0, duration: float = 60.0):
+    """techno_130 with 12 ms (std) timing jitter on every grid step.
+
+    The autocorrelation estimate wobbles by one lag under jitter; this guards
+    against a fresh agent at the wobbled tempo taking over the output.
+    """
+    humanize_ms = max(humanize_ms, 12.0)
+    audio, beats = _make_techno(duration, seed, humanize_ms, synco=False)
+    meta = _meta("techno_130_jitter", 130.0, duration, seed, humanize_ms, "techno",
+                 "techno_130 with 12 ms timing jitter on every step")
+    return audio, beats, meta
+
+
 def house_125(seed: int = 0, humanize_ms: float = 0.0, duration: float = 60.0):
     """125 BPM house: 4/4 kick, offbeat open hats, 16th shaker, clap on 2/4, sidechained pad."""
     rng = np.random.default_rng(seed)
@@ -525,6 +538,7 @@ def _meta(name, bpm, duration, seed, humanize_ms, preset, description) -> dict:
 SCENARIOS = {
     "techno_130": techno_130,
     "techno_130_synco": techno_130_synco,
+    "techno_130_jitter": techno_130_jitter,
     "house_125": house_125,
     "dnb_174": dnb_174,
     "trap_70": trap_70,

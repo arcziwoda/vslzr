@@ -100,8 +100,9 @@ class AudioAnalyzer:
         # Frequency array for centroid/rolloff calculations
         self._freqs = np.fft.rfftfreq(fft_size, d=1.0 / sample_rate)
 
-        # Previous frame for STFT 50% overlap
-        self._prev_frame: np.ndarray | None = None
+        # Sample history for the STFT window: the last fft_size samples, so the
+        # window is fully populated for any hop_size <= fft_size (not only hop == fft/2)
+        self._stft_buffer = np.zeros(fft_size)
 
         # Previous spectrum for flux calculation
         self._prev_magnitude: np.ndarray | None = None
@@ -127,6 +128,7 @@ class AudioAnalyzer:
         self._rms_window_size = int(5.0 * sample_rate / hop_size)  # ~215 frames at 44100/1024
         self._rms_history: deque[float] = deque(maxlen=self._rms_window_size)
         self._rms_floor = 1e-4  # Minimum RMS to avoid division by zero in silence
+        self._rms_relative_floor = 0.25  # Range floor as a fraction of the window peak
 
     def analyze(self, frame: np.ndarray) -> AudioFeatures:
         """
@@ -152,29 +154,19 @@ class AudioAnalyzer:
         if len(self._rms_history) > 10:
             rms_min = min(self._rms_history)
             rms_max = max(self._rms_history)
-            rms_range = max(rms_max - rms_min, self._rms_floor)
+            # Floor the range relative to the window peak: a steady-level signal
+            # (rms range ~2% of level) must not be stretched to full scale.
+            rms_range = max(rms_max - rms_min, self._rms_relative_floor * rms_max, self._rms_floor)
             features.rms = max(0.0, min(1.0, (raw_rms - rms_min) / rms_range))
         else:
             features.rms = raw_rms
 
-        # STFT with 50% overlap: concatenate previous frame with current frame
-        # to get a full fft_size window. On first call, zero-pad for compatibility.
-        if self._prev_frame is not None:
-            stft_frame = np.concatenate([self._prev_frame[-self.fft_size + len(frame):], frame])
+        # STFT window = the most recent fft_size samples (overlap = fft_size - hop)
+        if len(frame) >= self.fft_size:
+            self._stft_buffer = np.asarray(frame[-self.fft_size:], dtype=float)
         else:
-            stft_frame = np.zeros(self.fft_size)
-            stft_frame[-len(frame):] = frame
-
-        # Store current frame for next overlap
-        self._prev_frame = frame.copy()
-
-        # Truncate or pad to exact fft_size (safety for variable-length inputs)
-        if len(stft_frame) < self.fft_size:
-            padded = np.zeros(self.fft_size)
-            padded[-len(stft_frame):] = stft_frame
-            stft_frame = padded
-        elif len(stft_frame) > self.fft_size:
-            stft_frame = stft_frame[-self.fft_size:]
+            self._stft_buffer = np.concatenate([self._stft_buffer[len(frame):], frame])
+        stft_frame = self._stft_buffer
 
         # Apply Hann window
         windowed = stft_frame * self._window
@@ -277,8 +269,10 @@ class AudioAnalyzer:
         freq_per_bin = self.sample_rate / self.fft_size
 
         for band_name, (low_hz, high_hz) in FREQUENCY_BANDS.items():
+            # end is exclusive: adjacent bands must not share their boundary bin
             start_bin = max(1, round(low_hz / freq_per_bin))
-            end_bin = min(self.fft_size // 2, round(high_hz / freq_per_bin) + 1)
+            end_bin = min(self.fft_size // 2, round(high_hz / freq_per_bin))
+            end_bin = max(end_bin, start_bin + 1)
             slices[band_name] = (start_bin, end_bin)
 
         return slices
@@ -345,7 +339,7 @@ class AudioAnalyzer:
 
     def reset(self) -> None:
         """Reset internal state (previous spectrum, normalization)."""
-        self._prev_frame = None
+        self._stft_buffer = np.zeros(self.fft_size)
         self._prev_magnitude = None
         self._prev_mel_magnitude = None
         self._band_max = np.ones(7) * 1e-6

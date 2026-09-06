@@ -125,26 +125,33 @@ class AudioPipeline:
         logger.info("Audio pipeline started")
 
     def _sync_sample_rate(self):
-        """Re-create analyzer/beat_detector if device sample rate differs from config."""
+        """Re-create analyzer/beat_detector when the device sample rate differs from
+        the rate the DSP components were built for.
+
+        Compared against the live analyzer, not the config: after a 48 kHz device
+        the config rate (44100) would match a 44.1 kHz device and skip the rebuild.
+        Runtime tuning (genre preset BPM range and cooldown, bass boost) is carried
+        over; the rebuild must not silently revert the preset.
+        """
         actual_rate = self.capture._device_rate
         settings = self._settings
-        if actual_rate != settings.sample_rate:
+        if actual_rate != self.analyzer.sample_rate:
             logger.warning(
-                f"Device sample rate ({actual_rate} Hz) differs from config "
-                f"({settings.sample_rate} Hz) — re-initializing DSP components"
+                f"Device sample rate ({actual_rate} Hz) differs from DSP rate "
+                f"({self.analyzer.sample_rate} Hz) — re-initializing DSP components"
             )
             self.analyzer = AudioAnalyzer(
                 sample_rate=actual_rate,
                 fft_size=settings.fft_size,
-                bass_boost=settings.bass_boost_factor,
+                bass_boost=self.analyzer.bass_boost,
                 hop_size=settings.buffer_size,
             )
             self.beat_detector = BeatDetector(
                 sample_rate=actual_rate,
                 hop_size=settings.buffer_size,
-                cooldown_ms=settings.beat_cooldown_ms,
-                bpm_min=settings.bpm_min,
-                bpm_max=settings.bpm_max,
+                cooldown_ms=self.beat_detector._manual_cooldown_sec * 1000.0,
+                bpm_min=self.beat_detector.bpm_min,
+                bpm_max=self.beat_detector.bpm_max,
             )
             self.section_detector = SectionDetector(
                 sample_rate_hz=float(actual_rate) / settings.buffer_size,
@@ -184,9 +191,15 @@ class AudioPipeline:
         """Process all buffered audio frames. Returns True if any were processed.
 
         Frames are timestamped on the audio clock anchored to the current wall
-        time: the newest frame is "now", earlier frames in the same batch are
-        one hop apart. The 50 Hz tick otherwise stamps 0-2 frames with the same
-        time, adding a tick of jitter to every onset and prediction.
+        time, earlier frames in the same batch one hop apart. The 50 Hz tick
+        otherwise stamps 0-2 frames with the same time, adding a tick of jitter
+        to every onset and prediction.
+
+        The newest frame is stamped one hop BEFORE now: its capture completed at
+        about now, but the onset it reports (a rise between the previous window
+        and this one) happened around the centre of the STFT window, one hop
+        earlier. Stamping at the frame end made every onset and prediction
+        ~25 ms late end to end (measured with tools/engine_benchmark.py).
         """
         frames = self.capture.get_all_frames()
         if not frames:
@@ -194,16 +207,20 @@ class AudioPipeline:
         now = time.monotonic()
         frame_dur = self.analyzer.hop_size / self.analyzer.sample_rate
         for i, frame in enumerate(frames):
-            timestamp = now - (len(frames) - 1 - i) * frame_dur
+            timestamp = now - (len(frames) - i) * frame_dur
             self.features = self.analyzer.analyze(frame)
             self.beat_info = self.beat_detector.detect(self.features, timestamp=timestamp)
-            if self.beat_info.is_beat:
-                self._pending_beat = True
+            # The metric stream has its own cooldown and can fire on a frame
+            # where the raw stream did not (a syncopated hit consumed the raw
+            # cooldown); latch the two independently.
+            if self.beat_info.is_beat or self.beat_info.is_metric_beat:
                 self._pending_beat_strength = max(
                     self._pending_beat_strength, self.beat_info.beat_strength
                 )
-                if self.beat_info.is_metric_beat:
-                    self._pending_metric_beat = True
+            if self.beat_info.is_beat:
+                self._pending_beat = True
+            if self.beat_info.is_metric_beat:
+                self._pending_metric_beat = True
 
             # Latch per-band onsets (Task 1.5)
             if self.beat_info.kick_onset:
@@ -394,6 +411,7 @@ _bridge_ip: str | None = None
 _bridge_username: str | None = None
 _bridge_clientkey: str | None = None
 _bridge_area_id: str | None = None
+_last_process_error_time: float = 0.0
 
 
 async def audio_loop():
@@ -406,6 +424,10 @@ async def audio_loop():
     ws_interval = 1.0 / WS_RATE_HZ
     last_light_tick = time.monotonic()
     last_ws_tick = time.monotonic()
+    # Beat flags latched across the 50 Hz ticks between 30 Hz broadcasts, so
+    # the UI indicator does not miss ~40% of the beats.
+    ws_beat_pending = False
+    ws_metric_pending = False
 
     while True:
         next_tick = time.monotonic() + loop_interval
@@ -413,8 +435,19 @@ async def audio_loop():
         now = time.monotonic()
 
         if pipeline and pipeline.is_running:
-            had_frames = pipeline.process_all()
+            try:
+                had_frames = pipeline.process_all()
+            except Exception:
+                # An analysis error must not kill the loop: the lights would
+                # freeze at their last state with nothing in the log.
+                global _last_process_error_time
+                if now - _last_process_error_time > 5.0:
+                    logger.exception("Audio analysis error (further errors muted for 5 s)")
+                    _last_process_error_time = now
+                had_frames = False
             had_beat, had_metric_beat, beat_strength = pipeline.consume_beat()
+            ws_beat_pending = ws_beat_pending or had_beat
+            ws_metric_pending = ws_metric_pending or had_metric_beat
             kick, snare, hihat, kick_e, snare_e, hihat_e = pipeline.consume_band_onsets()
 
             output_features = pipeline.consume_features()
@@ -471,7 +504,16 @@ async def audio_loop():
                     "bands": [round(v, 4) for v in f.band_energies_raw.tolist()],
                     "band_names": BAND_NAMES,
                     "beat": {
-                        "is_beat": had_beat,
+                        # is_beat: the stream that drives the light flashes
+                        # (metric when the filter is on), so indicator and
+                        # lights agree. is_raw_beat: raw onset stream.
+                        "is_beat": (
+                            ws_metric_pending
+                            if effect_engine and effect_engine.metric_filter_enabled
+                            else ws_beat_pending
+                        ),
+                        "is_raw_beat": ws_beat_pending,
+                        "is_metric_beat": ws_metric_pending,
                         "bpm": round(b.bpm, 1),
                         "confidence": round(b.bpm_confidence, 2),
                         "strength": round(beat_strength, 2),
@@ -481,6 +523,8 @@ async def audio_loop():
                     "spectral_centroid": round(f.spectral_centroid, 1),
                     "spectral_flatness": round(f.spectral_flatness, 3),
                 }
+                ws_beat_pending = False
+                ws_metric_pending = False
 
                 if effect_engine:
                     data["lights_active"] = (
@@ -675,7 +719,7 @@ async def lifespan(app: FastAPI):
     # Reactive trigger gating (metric filter) from config
     effect_engine.set_metric_filter(settings.metric_beat_filter)
     # Task 2.6: Apply calibration delay from config
-    if settings.calibration_delay_ms > 0:
+    if settings.calibration_delay_ms != 0:
         effect_engine.set_calibration_delay(settings.calibration_delay_ms)
     # Task 2.8: Apply brightness min/max from config
     if settings.brightness_min > 0:

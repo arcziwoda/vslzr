@@ -1,0 +1,46 @@
+{
+  "scenario": "trap_70",
+  "description": "Half-time trap; ground truth is the 70 BPM quarter grid",
+  "true_bpm": null,
+  "preset": "trap",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.1554,
+      "cemgil": 0.1468,
+      "p_score": 0.4186,
+      "goto": 0.0,
+      "cmlc": 0.0,
+      "cmlt": 0.0,
+      "amlc": 0.0155,
+      "amlt": 0.1008,
+      "information_gain": 0.1817,
+      "estimated_count": 129,
+      "reference_count": 64,
+      "false_positives_per_min": 124.36,
+      "misses_per_min": 53.45,
+      "mean_signed_error_ms": 7.6,
+      "predictive_active_fraction": 0.692,
+      "trigger_count": 106,
+      "flash_count": 129
+    },
+    "metric": {
+      "f_measure": 0.784,
+      "cemgil": 0.741,
+      "p_score": 0.8594,
+      "goto": 0.0,
+      "cmlc": 0.3438,
+      "cmlt": 0.7656,
+      "amlc": 0.3438,
+      "amlt": 0.7656,
+      "information_gain": 0.5603,
+      "estimated_count": 61,
+      "reference_count": 64,
+      "false_positives_per_min": 13.09,
+      "misses_per_min": 16.36,
+      "mean_signed_error_ms": 10.1,
+      "predictive_active_fraction": 0.692,
+      "trigger_count": 73,
+      "flash_count": 61
+    }
+  }
+}

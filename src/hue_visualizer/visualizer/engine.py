@@ -57,6 +57,9 @@ from .spatial import SpatialMapper
 
 logger = logging.getLogger(__name__)
 
+# Fraction of the intensity brightness cap kept free for beat flashes
+FLASH_HEADROOM = 0.15
+
 
 # ---------------------------------------------------------------------------
 # Intensity levels (Task 1.12)
@@ -881,17 +884,17 @@ class EffectEngine:
             is_active = i in self._active_lights
             reactive_scale = 1.0 if (is_active or self._effects_size >= 1.0) else 0.15
 
-            # Flash overlays on blended brightness — all effects additive
+            # Flash overlays on blended brightness — all effects additive. The
+            # base is capped below the intensity cap so a flash on a loud
+            # passage still has headroom to be visible; the cap itself is hard.
+            base_b = min(target_b, self._max_brightness * (1.0 - FLASH_HEADROOM))
             combined_b = min(
-                1.0,
-                target_b
+                self._max_brightness,
+                base_b
                 + light.flash_brightness * reactive_scale
                 + light.bass_pulse_brightness * 0.7 * reactive_scale
                 + light.sparkle_brightness * 0.5 * reactive_scale
             )
-
-            # Task 1.12: Apply intensity max brightness cap
-            combined_b = min(combined_b, self._max_brightness)
 
             # --- Step 1: Asymmetric EMA smoothing — fast attack, slower release ---
             b_alpha = (
@@ -1215,6 +1218,11 @@ class EffectEngine:
     @property
     def use_metric_filtered_beats(self) -> bool:
         """Whether reactive triggers are gated on PLL-validated onsets."""
+        return self._use_metric_filtered_beats
+
+    @property
+    def metric_filter_enabled(self) -> bool:
+        """True when reactive beat flashes are gated on is_metric_beat."""
         return self._use_metric_filtered_beats
 
     def set_metric_filter(self, enabled: bool) -> None:
@@ -1568,8 +1576,8 @@ class EffectEngine:
             self._strobe_frequency = min(self._strobe_frequency, 2.0)
             self._strobe_duty_cycle = 0.5          # 50% duty — gentler
         else:
-            # Normal mode: no epilepsy limits, physical bulb limits only
-            self._min_flash_interval = 0.0         # No flash rate limit
+            # Normal mode: back to the configured flash rate limit
+            self._min_flash_interval = 1.0 / max(self._base_max_flash_hz, 0.1)
             self._strobe_max_frequency = 8.0       # ~12.5 FPS bulb limit
             self._strobe_frequency = min(self._strobe_base_frequency, 8.0)  # Restore
             self._strobe_duty_cycle = 0.3          # 30% duty — sharp punchy

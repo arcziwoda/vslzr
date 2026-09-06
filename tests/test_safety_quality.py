@@ -321,14 +321,14 @@ class TestSafeMode:
         assert engine._min_flash_interval == pytest.approx(0.5)
 
     def test_normal_mode_flash_rate_restored(self):
-        """Disabling safe mode should remove flash rate limit."""
+        """Disabling safe mode restores the configured flash rate limit, not
+        "no limit": max_flash_hz is the epilepsy safety limit from Settings."""
         engine = EffectEngine(num_lights=4, max_flash_hz=3.0)
         engine.set_safe_mode(True)
         assert engine._min_flash_interval == pytest.approx(0.5)
 
         engine.set_safe_mode(False)
-        # Normal mode: no flash rate limit
-        assert engine._min_flash_interval == 0.0
+        assert engine._min_flash_interval == pytest.approx(1.0 / 3.0)
 
     def test_safe_mode_reduces_flash_intensity(self):
         """In safe mode, beat flash strength should be reduced by 30%."""
@@ -722,3 +722,28 @@ class TestSafetyIntegration:
                 assert 0 <= s.brightness <= 1.0, (
                     f"Frame {i}: brightness={s.brightness}"
                 )
+
+
+class TestFlashHeadroom:
+    """A beat flash must stay visible when the base brightness sits at the
+    intensity cap (loud passage, drop)."""
+
+    def test_flash_raises_brightness_at_the_cap(self):
+        from hue_visualizer.audio.analyzer import AudioFeatures
+        from hue_visualizer.audio.beat_detector import BeatInfo
+
+        def loud():
+            f = AudioFeatures()
+            f.band_energies = np.ones(7)
+            f.rms = 1.0
+            return f
+
+        def run(with_beat: bool) -> float:
+            engine = EffectEngine(num_lights=2, attack_alpha=1.0, release_alpha=1.0)
+            for i in range(200):
+                engine.tick(loud(), BeatInfo(), 0.02, now=i * 0.02)
+            states = engine.tick(loud(), BeatInfo(is_beat=with_beat, beat_strength=1.0),
+                                 0.02, now=4.0)
+            return max(s.brightness for s in states)
+
+        assert run(True) > run(False) + 0.05

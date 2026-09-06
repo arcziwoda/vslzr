@@ -69,7 +69,7 @@ class TestAudioAnalyzer:
     def test_reset_clears_state(self, analyzer):
         analyzer.analyze(_sine(440, 2048))
         analyzer.reset()
-        assert analyzer._prev_frame is None
+        assert not np.any(analyzer._stft_buffer)
         assert analyzer._prev_magnitude is None
         assert len(analyzer._rms_history) == 0
 
@@ -201,3 +201,39 @@ class TestMelFilterbank:
             high_spacing = centers_hz[-1] - centers_hz[-9]
             assert high_spacing > low_spacing, \
                 f"Mel spacing: high bands ({high_spacing:.0f} Hz) should span more than low ({low_spacing:.0f} Hz)"
+
+
+class TestAnalyzerReviewRegressions:
+    """Regressions for the Sept 2026 analyzer review findings."""
+
+    def test_band_slices_do_not_overlap(self):
+        for sr in (44100, 48000):
+            analyzer = AudioAnalyzer(sample_rate=sr, fft_size=2048, hop_size=1024)
+            slices = list(analyzer._band_slices.values())
+            for (s0, e0), (s1, e1) in zip(slices, slices[1:]):
+                assert e0 <= s1, f"bands share bin {e0 - 1} at {sr} Hz"
+                assert e0 > s0
+
+    def test_stft_window_is_full_for_small_hops(self):
+        sr = 44100
+        t = np.arange(sr) / sr
+        sine = (0.8 * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
+        peaks = {}
+        for hop in (1024, 512, 256):
+            analyzer = AudioAnalyzer(sample_rate=sr, fft_size=2048, hop_size=hop)
+            for i in range(0, 8192, hop):
+                features = analyzer.analyze(sine[i:i + hop])
+            peaks[hop] = float(np.max(features.spectrum))
+        assert abs(peaks[512] - peaks[1024]) < 0.5
+        assert abs(peaks[256] - peaks[1024]) < 0.5
+
+    def test_steady_level_rms_is_not_stretched_to_full_scale(self):
+        rng = np.random.default_rng(0)
+        analyzer = AudioAnalyzer(sample_rate=44100, fft_size=2048, hop_size=1024)
+        values = []
+        for _ in range(300):
+            frame = (0.1 * rng.standard_normal(1024)).astype(np.float32)
+            values.append(analyzer.analyze(frame).rms)
+        values = np.array(values[20:])
+        assert values.max() - values.min() < 0.5
+        assert values.std() < 0.12

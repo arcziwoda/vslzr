@@ -1,0 +1,46 @@
+{
+  "scenario": "techno_130_jitter",
+  "description": "techno_130 with 12 ms timing jitter on every step",
+  "true_bpm": null,
+  "preset": "techno",
+  "configs": {
+    "reactive": {
+      "f_measure": 0.3065,
+      "cemgil": 0.2876,
+      "p_score": 0.3732,
+      "goto": 0.0,
+      "cmlc": 0.0282,
+      "cmlt": 0.162,
+      "amlc": 0.0282,
+      "amlt": 0.162,
+      "information_gain": 0.1066,
+      "estimated_count": 142,
+      "reference_count": 119,
+      "false_positives_per_min": 111.27,
+      "misses_per_min": 86.18,
+      "mean_signed_error_ms": -1.1,
+      "predictive_active_fraction": 0.879,
+      "trigger_count": 174,
+      "flash_count": 141
+    },
+    "metric": {
+      "f_measure": 0.9205,
+      "cemgil": 0.8133,
+      "p_score": 0.9667,
+      "goto": 1.0,
+      "cmlc": 0.6167,
+      "cmlt": 0.9333,
+      "amlc": 0.6167,
+      "amlt": 0.9333,
+      "information_gain": 0.4815,
+      "estimated_count": 120,
+      "reference_count": 119,
+      "false_positives_per_min": 10.91,
+      "misses_per_min": 9.82,
+      "mean_signed_error_ms": 15.5,
+      "predictive_active_fraction": 0.879,
+      "trigger_count": 174,
+      "flash_count": 120
+    }
+  }
+}

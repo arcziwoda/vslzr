@@ -152,3 +152,46 @@ class TestCoasting:
         assert abs(60.0 / det._best_agent.period - 130) < 3.0
         assert early >= 0.6  # 5 s into the breakdown predictive is still active
         assert 0.4 <= late <= early  # tiered decay, floored at 50% of held quality
+
+
+class TestAgentTakeover:
+    """A freshly seeded agent inherits 0.9x the best score. Under timing jitter
+    the autocorrelation estimate wobbles by one lag (130 -> 123 BPM); the tempo
+    prior then favoured the fresh seed and it took the output for several beats
+    with no confirmations of its own."""
+
+    def test_fresh_seed_cannot_dethrone_an_established_agent(self):
+        det = BeatDetector(SR, HOP)
+        _run(det, 130, 15)
+        best = det._best_agent
+        assert best is not None and abs(60.0 / best.period - 130) < 2.0
+
+        # Autocorrelation wobbles to 123 BPM and seeds an agent there with an
+        # inherited score above the current best
+        det._prior_bpm = 123.0
+        from hue_visualizer.audio.beat_detector import BeatAgent
+        det._agents.append(
+            BeatAgent(period=60.0 / 123.0, phase=0.3, score=best.score * 1.5, born=15.0)
+        )
+        det._select_best_agent()
+        det._prune_agents(15.0)
+        assert det._best_agent is best
+        assert best in det._agents
+
+    def test_metric_stream_survives_timing_jitter(self):
+        rng = np.random.default_rng(0)
+        det = BeatDetector(SR, HOP)
+        period = 60.0 / 130
+        metric = []
+        kick_times: dict[int, float] = {}
+        for i in range(int(30 / FRAME_DUR)):
+            t = i * FRAME_DUR
+            beat_idx = round(t / period)
+            if beat_idx not in kick_times:
+                kick_times[beat_idx] = beat_idx * period + rng.normal(0.0, 0.012)
+            kick = 0.0 <= t - kick_times[beat_idx] < FRAME_DUR
+            info = det.detect(_frame(kick), timestamp=t)
+            if info.is_metric_beat and t > 5.0:
+                metric.append(t)
+        expected = int(25.0 / period)
+        assert len(metric) >= expected - 3

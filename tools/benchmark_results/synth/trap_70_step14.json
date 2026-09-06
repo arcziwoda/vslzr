@@ -1,0 +1,2748 @@
+{
+  "scenario": "trap_70",
+  "meta": {
+    "name": "trap_70",
+    "true_bpm": 70.0,
+    "duration_sec": 60.0,
+    "sample_rate": 44100,
+    "seed": 0,
+    "humanize_ms": 0.0,
+    "preset": "trap",
+    "description": "Half-time trap; ground truth is the 70 BPM quarter grid"
+  },
+  "duration_sec": 60.0,
+  "reference_beat_count": 70,
+  "runs": [
+    {
+      "config": {
+        "name": "default",
+        "bpm_min": 80.0,
+        "bpm_max": 180.0,
+        "cooldown_ms": 300.0,
+        "bass_boost": 2.0
+      },
+      "detector": {
+        "final_bpm": 140.0,
+        "true_bpm": 70.0,
+        "bpm_error": 70.0,
+        "lock_on_time_sec": 5.341,
+        "mean_confidence_after_5s": 0.914,
+        "realtime_ratio": 163.0,
+        "frames_processed": 2582
+      },
+      "streams": {
+        "raw": {
+          "f_measure": 0.184,
+          "cemgil": 0.1847,
+          "p_score": 0.3333,
+          "goto": 0.0,
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.0236,
+          "amlt": 0.1417,
+          "information_gain": 0.3144,
+          "estimated_count": 99,
+          "reference_count": 64,
+          "false_positives_per_min": 91.64,
+          "misses_per_min": 53.45,
+          "mean_signed_error_ms": -6.3
+        },
+        "metric": {
+          "f_measure": 0.5109,
+          "cemgil": 0.4921,
+          "p_score": 0.4795,
+          "goto": 0.0,
+          "cmlc": 0.0137,
+          "cmlt": 0.0137,
+          "amlc": 0.0394,
+          "amlt": 0.3307,
+          "information_gain": 0.5199,
+          "estimated_count": 73,
+          "reference_count": 64,
+          "false_positives_per_min": 41.45,
+          "misses_per_min": 31.64,
+          "mean_signed_error_ms": -9.2
+        },
+        "predicted": {
+          "f_measure": 0.6632,
+          "cemgil": 0.6373,
+          "p_score": 0.4961,
+          "goto": 0.0,
+          "cmlc": 0.0,
+          "cmlt": 0.0,
+          "amlc": 0.9845,
+          "amlt": 0.9845,
+          "information_gain": 0.6672,
+          "estimated_count": 129,
+          "reference_count": 64,
+          "false_positives_per_min": 70.91,
+          "misses_per_min": 0.0,
+          "mean_signed_error_ms": -8.5
+        }
+      },
+      "bpm_trace": [
+        {
+          "time": 0.0,
+          "bpm": 0.0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.232,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.464,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.697,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.929,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 1.161,
+          "bpm": 121.1,
+          "confidence": 0.25
+        },
+        {
+          "time": 1.393,
+          "bpm": 121.1,
+          "confidence": 0.25
+        },
+        {
+          "time": 1.625,
+          "bpm": 121.1,
+          "confidence": 0.25
+        },
+        {
+          "time": 1.858,
+          "bpm": 121.1,
+          "confidence": 0.25
+        },
+        {
+          "time": 2.09,
+          "bpm": 121.1,
+          "confidence": 0.225
+        },
+        {
+          "time": 2.322,
+          "bpm": 121.1,
+          "confidence": 0.475
+        },
+        {
+          "time": 2.554,
+          "bpm": 121.1,
+          "confidence": 0.475
+        },
+        {
+          "time": 2.786,
+          "bpm": 121.1,
+          "confidence": 0.214
+        },
+        {
+          "time": 3.019,
+          "bpm": 121.1,
+          "confidence": 0.214
+        },
+        {
+          "time": 3.251,
+          "bpm": 121.1,
+          "confidence": 0.214
+        },
+        {
+          "time": 3.483,
+          "bpm": 121.1,
+          "confidence": 0.214
+        },
+        {
+          "time": 3.715,
+          "bpm": 126.3,
+          "confidence": 0.437
+        },
+        {
+          "time": 3.947,
+          "bpm": 133.7,
+          "confidence": 0.498
+        },
+        {
+          "time": 4.18,
+          "bpm": 135.9,
+          "confidence": 0.498
+        },
+        {
+          "time": 4.412,
+          "bpm": 137.0,
+          "confidence": 0.498
+        },
+        {
+          "time": 4.644,
+          "bpm": 138.0,
+          "confidence": 0.498
+        },
+        {
+          "time": 4.876,
+          "bpm": 138.0,
+          "confidence": 0.559
+        },
+        {
+          "time": 5.108,
+          "bpm": 138.0,
+          "confidence": 0.559
+        },
+        {
+          "time": 5.341,
+          "bpm": 139.0,
+          "confidence": 0.615
+        },
+        {
+          "time": 5.573,
+          "bpm": 139.0,
+          "confidence": 0.736
+        },
+        {
+          "time": 5.805,
+          "bpm": 139.0,
+          "confidence": 0.736
+        },
+        {
+          "time": 6.037,
+          "bpm": 139.0,
+          "confidence": 0.663
+        },
+        {
+          "time": 6.269,
+          "bpm": 139.0,
+          "confidence": 0.663
+        },
+        {
+          "time": 6.502,
+          "bpm": 139.0,
+          "confidence": 0.663
+        },
+        {
+          "time": 6.734,
+          "bpm": 139.0,
+          "confidence": 0.663
+        },
+        {
+          "time": 6.966,
+          "bpm": 139.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 7.198,
+          "bpm": 139.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 7.43,
+          "bpm": 140.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 7.663,
+          "bpm": 140.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 7.895,
+          "bpm": 140.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 8.127,
+          "bpm": 140.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 8.359,
+          "bpm": 140.0,
+          "confidence": 0.727
+        },
+        {
+          "time": 8.591,
+          "bpm": 140.0,
+          "confidence": 0.768
+        },
+        {
+          "time": 8.824,
+          "bpm": 140.0,
+          "confidence": 0.768
+        },
+        {
+          "time": 9.056,
+          "bpm": 140.0,
+          "confidence": 0.783
+        },
+        {
+          "time": 9.288,
+          "bpm": 140.0,
+          "confidence": 0.783
+        },
+        {
+          "time": 9.52,
+          "bpm": 140.0,
+          "confidence": 0.705
+        },
+        {
+          "time": 9.752,
+          "bpm": 140.0,
+          "confidence": 0.705
+        },
+        {
+          "time": 9.985,
+          "bpm": 140.0,
+          "confidence": 0.705
+        },
+        {
+          "time": 10.217,
+          "bpm": 140.0,
+          "confidence": 0.705
+        },
+        {
+          "time": 10.449,
+          "bpm": 140.0,
+          "confidence": 0.908
+        },
+        {
+          "time": 10.681,
+          "bpm": 140.0,
+          "confidence": 0.908
+        },
+        {
+          "time": 10.913,
+          "bpm": 140.0,
+          "confidence": 0.409
+        },
+        {
+          "time": 11.146,
+          "bpm": 140.0,
+          "confidence": 0.409
+        },
+        {
+          "time": 11.378,
+          "bpm": 140.0,
+          "confidence": 0.409
+        },
+        {
+          "time": 11.61,
+          "bpm": 140.0,
+          "confidence": 0.435
+        },
+        {
+          "time": 11.842,
+          "bpm": 140.0,
+          "confidence": 0.435
+        },
+        {
+          "time": 12.074,
+          "bpm": 140.0,
+          "confidence": 0.474
+        },
+        {
+          "time": 12.307,
+          "bpm": 140.0,
+          "confidence": 0.474
+        },
+        {
+          "time": 12.539,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 12.771,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 13.003,
+          "bpm": 140.0,
+          "confidence": 0.989
+        },
+        {
+          "time": 13.235,
+          "bpm": 140.0,
+          "confidence": 0.989
+        },
+        {
+          "time": 13.468,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 13.7,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 13.932,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 14.164,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 14.396,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 14.629,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 14.861,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 15.093,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 15.325,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 15.557,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 15.79,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 16.022,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 16.254,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 16.486,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 16.718,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 16.951,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 17.183,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 17.415,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 17.647,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 17.879,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 18.112,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 18.344,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 18.576,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 18.808,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 19.04,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 19.273,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 19.505,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 19.737,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 19.969,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 20.201,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 20.434,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 20.666,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 20.898,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.13,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.362,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.595,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.827,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.059,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.291,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.523,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.756,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.988,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 23.22,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 23.452,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 23.684,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 23.917,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.149,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.381,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.613,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.845,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.078,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.31,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.542,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.774,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.006,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.239,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.471,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.703,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.935,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 27.167,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 27.4,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 27.632,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 27.864,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 28.096,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 28.328,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 28.561,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 28.793,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.025,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 29.257,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 29.489,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 29.722,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 29.954,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.186,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.418,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.65,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.883,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 31.115,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 31.347,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 31.579,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 31.811,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 32.044,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 32.276,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 32.508,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 32.74,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 32.972,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 33.205,
+          "bpm": 140.0,
+          "confidence": 0.5
+        },
+        {
+          "time": 33.437,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.669,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.901,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.133,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.366,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.598,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.83,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.062,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.294,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.527,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.759,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.991,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.223,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.455,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.688,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.92,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.152,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.384,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.616,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.849,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.081,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.313,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.545,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.777,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.01,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.242,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.474,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.706,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.938,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 40.171,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 40.403,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 40.635,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 40.867,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.099,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.332,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.564,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.796,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.028,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.26,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.493,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.725,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.957,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.189,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.421,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.654,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.886,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.118,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.35,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.582,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.815,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.047,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.279,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.511,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.743,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.976,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.208,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.44,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.672,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.904,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 47.137,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 47.369,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 47.601,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 47.833,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.065,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.298,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.53,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.762,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.994,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.226,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.459,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.691,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.923,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.155,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.387,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.62,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.852,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.084,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.316,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.548,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.78,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.013,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.245,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.477,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.709,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.941,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.174,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.406,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.638,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.87,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.102,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.335,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.567,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.799,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.031,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.263,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.496,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.728,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.96,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.192,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.424,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.657,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.889,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 57.121,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 57.353,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 57.585,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 57.818,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.05,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.282,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.514,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.746,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.979,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.211,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.443,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.675,
+          "bpm": 140.0,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.907,
+          "bpm": 140.0,
+          "confidence": 1.0
+        }
+      ]
+    },
+    {
+      "config": {
+        "name": "preset:trap",
+        "bpm_min": 60.0,
+        "bpm_max": 90.0,
+        "cooldown_ms": 350,
+        "bass_boost": 2.0
+      },
+      "detector": {
+        "final_bpm": 70.7,
+        "true_bpm": 70.0,
+        "bpm_error": 0.7,
+        "lock_on_time_sec": 8.591,
+        "mean_confidence_after_5s": 0.829,
+        "realtime_ratio": 160.6,
+        "frames_processed": 2582
+      },
+      "streams": {
+        "raw": {
+          "f_measure": 0.2,
+          "cemgil": 0.191,
+          "p_score": 0.3485,
+          "goto": 0.0,
+          "cmlc": 0.0152,
+          "cmlt": 0.0455,
+          "amlc": 0.0303,
+          "amlt": 0.1061,
+          "information_gain": 0.2626,
+          "estimated_count": 66,
+          "reference_count": 64,
+          "false_positives_per_min": 57.82,
+          "misses_per_min": 55.64,
+          "mean_signed_error_ms": -10.6
+        },
+        "metric": {
+          "f_measure": 0.6733,
+          "cemgil": 0.6468,
+          "p_score": 0.5312,
+          "goto": 0.0,
+          "cmlc": 0.0312,
+          "cmlt": 0.125,
+          "amlc": 0.4054,
+          "amlt": 0.6757,
+          "information_gain": 0.6997,
+          "estimated_count": 37,
+          "reference_count": 64,
+          "false_positives_per_min": 3.27,
+          "misses_per_min": 32.73,
+          "mean_signed_error_ms": -9.5
+        },
+        "predicted": {
+          "f_measure": 0.9091,
+          "cemgil": 0.8706,
+          "p_score": 0.9118,
+          "goto": 0.0,
+          "cmlc": 0.5,
+          "cmlt": 0.8382,
+          "amlc": 0.5,
+          "amlt": 0.8382,
+          "information_gain": 0.6784,
+          "estimated_count": 68,
+          "reference_count": 64,
+          "false_positives_per_min": 8.73,
+          "misses_per_min": 4.36,
+          "mean_signed_error_ms": -10.3
+        }
+      },
+      "bpm_trace": [
+        {
+          "time": 0.0,
+          "bpm": 0.0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.232,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.464,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.697,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 0.929,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 1.161,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 1.393,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 1.625,
+          "bpm": 0,
+          "confidence": 0.0
+        },
+        {
+          "time": 1.858,
+          "bpm": 90.0,
+          "confidence": 0.25
+        },
+        {
+          "time": 2.09,
+          "bpm": 90.0,
+          "confidence": 0.225
+        },
+        {
+          "time": 2.322,
+          "bpm": 90.0,
+          "confidence": 0.113
+        },
+        {
+          "time": 2.554,
+          "bpm": 90.0,
+          "confidence": 0.113
+        },
+        {
+          "time": 2.786,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 3.019,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 3.251,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 3.483,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 3.715,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 3.947,
+          "bpm": 90.0,
+          "confidence": 0.101
+        },
+        {
+          "time": 4.18,
+          "bpm": 84.3,
+          "confidence": 0.268
+        },
+        {
+          "time": 4.412,
+          "bpm": 80.7,
+          "confidence": 0.268
+        },
+        {
+          "time": 4.644,
+          "bpm": 79.6,
+          "confidence": 0.268
+        },
+        {
+          "time": 4.876,
+          "bpm": 78.6,
+          "confidence": 0.298
+        },
+        {
+          "time": 5.108,
+          "bpm": 78.6,
+          "confidence": 0.298
+        },
+        {
+          "time": 5.341,
+          "bpm": 78.6,
+          "confidence": 0.298
+        },
+        {
+          "time": 5.573,
+          "bpm": 78.6,
+          "confidence": 0.268
+        },
+        {
+          "time": 5.805,
+          "bpm": 81.2,
+          "confidence": 0.529
+        },
+        {
+          "time": 6.037,
+          "bpm": 83.3,
+          "confidence": 0.529
+        },
+        {
+          "time": 6.269,
+          "bpm": 84.3,
+          "confidence": 0.529
+        },
+        {
+          "time": 6.502,
+          "bpm": 85.3,
+          "confidence": 0.529
+        },
+        {
+          "time": 6.734,
+          "bpm": 85.3,
+          "confidence": 0.529
+        },
+        {
+          "time": 6.966,
+          "bpm": 85.3,
+          "confidence": 0.529
+        },
+        {
+          "time": 7.198,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 7.43,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 7.663,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 7.895,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 8.127,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 8.359,
+          "bpm": 85.3,
+          "confidence": 0.238
+        },
+        {
+          "time": 8.591,
+          "bpm": 83.5,
+          "confidence": 0.629
+        },
+        {
+          "time": 8.824,
+          "bpm": 76.4,
+          "confidence": 0.629
+        },
+        {
+          "time": 9.056,
+          "bpm": 72.9,
+          "confidence": 0.629
+        },
+        {
+          "time": 9.288,
+          "bpm": 71.8,
+          "confidence": 0.629
+        },
+        {
+          "time": 9.52,
+          "bpm": 70.8,
+          "confidence": 0.566
+        },
+        {
+          "time": 9.752,
+          "bpm": 70.8,
+          "confidence": 0.566
+        },
+        {
+          "time": 9.985,
+          "bpm": 70.8,
+          "confidence": 0.566
+        },
+        {
+          "time": 10.217,
+          "bpm": 70.8,
+          "confidence": 0.566
+        },
+        {
+          "time": 10.449,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 10.681,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 10.913,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 11.146,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 11.378,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 11.61,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 11.842,
+          "bpm": 70.8,
+          "confidence": 0.692
+        },
+        {
+          "time": 12.074,
+          "bpm": 70.8,
+          "confidence": 0.77
+        },
+        {
+          "time": 12.307,
+          "bpm": 70.8,
+          "confidence": 0.77
+        },
+        {
+          "time": 12.539,
+          "bpm": 70.8,
+          "confidence": 0.77
+        },
+        {
+          "time": 12.771,
+          "bpm": 70.8,
+          "confidence": 0.77
+        },
+        {
+          "time": 13.003,
+          "bpm": 70.8,
+          "confidence": 0.693
+        },
+        {
+          "time": 13.235,
+          "bpm": 70.8,
+          "confidence": 0.693
+        },
+        {
+          "time": 13.468,
+          "bpm": 70.8,
+          "confidence": 0.693
+        },
+        {
+          "time": 13.7,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 13.932,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 14.164,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 14.396,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 14.629,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 14.861,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 15.093,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 15.325,
+          "bpm": 70.8,
+          "confidence": 0.788
+        },
+        {
+          "time": 15.557,
+          "bpm": 70.8,
+          "confidence": 0.904
+        },
+        {
+          "time": 15.79,
+          "bpm": 70.8,
+          "confidence": 0.904
+        },
+        {
+          "time": 16.022,
+          "bpm": 70.8,
+          "confidence": 0.904
+        },
+        {
+          "time": 16.254,
+          "bpm": 70.8,
+          "confidence": 0.814
+        },
+        {
+          "time": 16.486,
+          "bpm": 70.8,
+          "confidence": 0.814
+        },
+        {
+          "time": 16.718,
+          "bpm": 70.8,
+          "confidence": 0.814
+        },
+        {
+          "time": 16.951,
+          "bpm": 70.8,
+          "confidence": 0.814
+        },
+        {
+          "time": 17.183,
+          "bpm": 70.8,
+          "confidence": 0.955
+        },
+        {
+          "time": 17.415,
+          "bpm": 70.8,
+          "confidence": 0.955
+        },
+        {
+          "time": 17.647,
+          "bpm": 70.8,
+          "confidence": 0.955
+        },
+        {
+          "time": 17.879,
+          "bpm": 70.8,
+          "confidence": 0.955
+        },
+        {
+          "time": 18.112,
+          "bpm": 70.8,
+          "confidence": 0.86
+        },
+        {
+          "time": 18.344,
+          "bpm": 70.8,
+          "confidence": 0.86
+        },
+        {
+          "time": 18.576,
+          "bpm": 70.8,
+          "confidence": 0.86
+        },
+        {
+          "time": 18.808,
+          "bpm": 70.8,
+          "confidence": 0.86
+        },
+        {
+          "time": 19.04,
+          "bpm": 70.8,
+          "confidence": 0.986
+        },
+        {
+          "time": 19.273,
+          "bpm": 70.8,
+          "confidence": 0.986
+        },
+        {
+          "time": 19.505,
+          "bpm": 70.8,
+          "confidence": 0.986
+        },
+        {
+          "time": 19.737,
+          "bpm": 70.8,
+          "confidence": 0.887
+        },
+        {
+          "time": 19.969,
+          "bpm": 70.8,
+          "confidence": 0.887
+        },
+        {
+          "time": 20.201,
+          "bpm": 70.8,
+          "confidence": 0.887
+        },
+        {
+          "time": 20.434,
+          "bpm": 70.8,
+          "confidence": 0.887
+        },
+        {
+          "time": 20.666,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 20.898,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.13,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.362,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 21.595,
+          "bpm": 70.8,
+          "confidence": 0.962
+        },
+        {
+          "time": 21.827,
+          "bpm": 70.8,
+          "confidence": 0.962
+        },
+        {
+          "time": 22.059,
+          "bpm": 70.8,
+          "confidence": 0.962
+        },
+        {
+          "time": 22.291,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.523,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.756,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 22.988,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 23.22,
+          "bpm": 70.8,
+          "confidence": 0.94
+        },
+        {
+          "time": 23.452,
+          "bpm": 70.8,
+          "confidence": 0.94
+        },
+        {
+          "time": 23.684,
+          "bpm": 70.8,
+          "confidence": 0.94
+        },
+        {
+          "time": 23.917,
+          "bpm": 70.8,
+          "confidence": 0.94
+        },
+        {
+          "time": 24.149,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.381,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.613,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 24.845,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.078,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.31,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.542,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 25.774,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.006,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.239,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.471,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.703,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 26.935,
+          "bpm": 70.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 27.167,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 27.4,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 27.632,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 27.864,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 28.096,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 28.328,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 28.561,
+          "bpm": 70.8,
+          "confidence": 0.5
+        },
+        {
+          "time": 28.793,
+          "bpm": 73.8,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.025,
+          "bpm": 75.2,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.257,
+          "bpm": 72.9,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.489,
+          "bpm": 71.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.722,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 29.954,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.186,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.418,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.65,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 30.883,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 31.115,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 31.347,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 31.579,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 31.811,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 32.044,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 32.276,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 32.508,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 32.74,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 32.972,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.205,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.437,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.669,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 33.901,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.133,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.366,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.598,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 34.83,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.062,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.294,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.527,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.759,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 35.991,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.223,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.455,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.688,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 36.92,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.152,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 37.384,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 37.616,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 37.849,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 38.081,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 38.313,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.545,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 38.777,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.01,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.242,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.474,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 39.706,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 39.938,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 40.171,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 40.403,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 40.635,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 40.867,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 41.099,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 41.332,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.564,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 41.796,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.028,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.26,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.493,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.725,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 42.957,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.189,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.421,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.654,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 43.886,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.118,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.35,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.582,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 44.815,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.047,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.279,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.511,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.743,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 45.976,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.208,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.44,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 46.672,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 46.904,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 47.137,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 47.369,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 47.601,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 47.833,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 48.065,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 48.298,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 48.53,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.762,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 48.994,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.226,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.459,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.691,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 49.923,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.155,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.387,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.62,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 50.852,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.084,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.316,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.548,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 51.78,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.013,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.245,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.477,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.709,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 52.941,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.174,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.406,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.638,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 53.87,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.102,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.335,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.567,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 54.799,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.031,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.263,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.496,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.728,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 55.96,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.192,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.424,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.657,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 56.889,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 57.121,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 57.353,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 57.585,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 57.818,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 58.05,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 58.282,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 58.514,
+          "bpm": 70.7,
+          "confidence": 0.5
+        },
+        {
+          "time": 58.746,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 58.979,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.211,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.443,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.675,
+          "bpm": 70.7,
+          "confidence": 1.0
+        },
+        {
+          "time": 59.907,
+          "bpm": 70.7,
+          "confidence": 1.0
+        }
+      ]
+    }
+  ],
+  "tag": "step14"
+}

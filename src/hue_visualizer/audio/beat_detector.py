@@ -51,6 +51,7 @@ AGENT_LS_MIN_POINTS = 6  # Confirmations needed before the LS period fit is used
 AGENT_LS_GAIN = 0.3  # Pull of the agent period toward the LS estimate per confirmation
 AGENT_GRACE_BEATS = 4.0
 AGENT_SWITCH_MARGIN = 1.25  # Challenger must beat the current best by 25%
+AGENT_CHALLENGER_MIN_HITS = 3  # Own confirmations before an agent can become best
 
 
 @dataclass
@@ -728,7 +729,12 @@ class BeatDetector:
         # is confirmed on every one of its predictions and would otherwise
         # out-score (and kill) the correct agent whenever some beats lack onsets.
         ranked = {id(a): a.score * self._tempo_prior(a) for a in self._agents}
-        best_ranked = max(ranked.values())
+        # Fresh seeds with an inherited score do not set the bar (see
+        # _select_best_agent); an established agent must not be killed by one.
+        established = [
+            a for a in self._agents if len(a.confirmations) >= AGENT_CHALLENGER_MIN_HITS
+        ] or self._agents
+        best_ranked = max(ranked[id(a)] for a in established)
         kept = []
         for agent in self._agents:
             if agent.consecutive_misses >= self._agent_max_misses:
@@ -755,16 +761,27 @@ class BeatDetector:
             return
 
         ranked = {id(a): a.score * self._tempo_prior(a) for a in self._agents}
-        top_score = max(ranked.values())
         current = self._best_agent
-        if (
-            current is not None
-            and current in self._agents
-            and ranked[id(current)] * AGENT_SWITCH_MARGIN >= top_score
-        ):
+        if current is not None and current not in self._agents:
+            current = None
+
+        # A freshly seeded agent carries an inherited score it has not earned.
+        # While a best agent exists, only agents with their own confirmations
+        # may challenge it; otherwise a transient autocorrelation wobble (lag
+        # quantization under timing jitter) seeds an agent at the new prior
+        # tempo and hands it the output for the next few beats.
+        if current is not None:
+            eligible = [
+                a for a in self._agents
+                if a is current or len(a.confirmations) >= AGENT_CHALLENGER_MIN_HITS
+            ]
+        else:
+            eligible = list(self._agents)
+        top_score = max(ranked[id(a)] for a in eligible)
+        if current is not None and ranked[id(current)] * AGENT_SWITCH_MARGIN >= top_score:
             return
 
-        self._best_agent = max(self._agents, key=lambda a: ranked[id(a)])
+        self._best_agent = max(eligible, key=lambda a: ranked[id(a)])
 
     def _tempo_prior(self, agent: BeatAgent) -> float:
         """Weight for agent selection: 1.0 at the autocorrelation tempo, falling
