@@ -15,6 +15,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ("frontend", "frontend"),
+        # Beat RNN weights (CC BY-NC-SA, see the LICENSE next to them)
+        ("src/hue_visualizer/audio/models", "hue_visualizer/audio/models"),
         ("assets", "assets"),
     ],
     hiddenimports=mbedtls_hidden + [
