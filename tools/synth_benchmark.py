@@ -6,7 +6,7 @@ offset / sample_rate), exactly the way tools/benchmark_beats.py drives a real
 file, and scores three estimated beat streams against the ground truth:
 
   raw        — every BeatInfo.is_beat (unfiltered onset stream)
-  metric     — is_beat and is_metric_beat (PLL-validated onsets)
+  metric     — is_metric_beat (PLL-validated onsets, own cooldown)
   predicted  — distinct BeatInfo.predicted_next_beat values (the stream the
                engine actually uses for predictive triggering)
 
@@ -113,8 +113,8 @@ def run_detector(
 
         if info.is_beat:
             raw_beats.append(t)
-            if info.is_metric_beat:
-                metric_beats.append(t)
+        if info.is_metric_beat:
+            metric_beats.append(t)
 
         # Predicted beats: distinct predicted_next_beat values. The value only
         # moves when the PLL re-anchors, so dedupe by a 30 ms difference.
@@ -294,7 +294,7 @@ def print_scenario_table(result: dict) -> None:
 def print_summary(results: list[dict]) -> None:
     print()
     print("=" * 92)
-    print("SUMMARY — metric stream (is_beat and is_metric_beat)")
+    print("SUMMARY — metric stream (is_metric_beat)")
     print("=" * 92)
     head = (f"{'scenario':<20}{'config':<16}{'F':>7}{'CMLc':>7}{'AMLc':>7}"
             f"{'AMLc-CMLc':>11}{'FP/min':>8}{'BPM':>8}{'true':>7}")

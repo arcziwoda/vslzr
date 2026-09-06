@@ -24,21 +24,36 @@ from .analyzer import AudioFeatures
 
 @dataclass
 class BeatAgent:
-    """A competing beat tracking hypothesis with PI-PLL."""
+    """A competing beat tracking hypothesis with PI-PLL.
+
+    score is a leaky hit count: decays by AGENT_SCORE_DECAY on every prediction
+    (phase wrap) and gains +1 on every confirmed onset. A perfect agent settles at
+    1 / (1 - decay) = 10; an agent confirmed on a fraction h of its predictions at
+    10h. New agents inherit 0.9x the best score (IBT) and are protected from
+    pruning for AGENT_GRACE_BEATS of their own period.
+    """
 
     period: float  # Seconds between beats
     phase: float = 0.0  # 0=beat, 0.5=midpoint, wraps at 1.0
     integral_error: float = 0.0
-    score: float = 1.0  # Accumulated confidence score
+    score: float = 1.0  # Leaky hit count, see class docstring
     consecutive_misses: int = 0
+    born: float = 0.0  # Timestamp the agent was seeded
+
+
+AGENT_SCORE_DECAY = 0.9
+AGENT_GRACE_BEATS = 4.0
+AGENT_SWITCH_MARGIN = 1.15  # Challenger must beat the current best by 15%
 
 
 @dataclass
 class BeatInfo:
     """Beat detection results for a single frame."""
 
-    is_beat: bool = False  # Raw onset (energy or SuperFlux flux) past cooldown
-    is_metric_beat: bool = False  # Onset validated by PLL — aligns with best agent phase
+    is_beat: bool = False  # Raw onset (energy or SuperFlux flux) past the raw cooldown
+    # Onset where the trusted PLL expects a beat (own half-period cooldown, independent
+    # of is_beat). Equals is_beat while no agent is trusted yet.
+    is_metric_beat: bool = False
     bpm: float = 0.0
     bpm_confidence: float = 0.0
     beat_strength: float = 0.0  # 0-1, how strong the beat is
@@ -55,12 +70,14 @@ class BeatInfo:
 
 
 class BeatDetector:
-    """Real-time beat detection with autocorrelation BPM and PLL tracking.
+    """Real-time beat detection with autocorrelation BPM and multi-agent PLL tracking.
 
-    Detection: energy-based bass threshold (adaptive, variance-scaled).
-    BPM estimation: autocorrelation of onset function over ~4s window.
-    Tracking: PLL with proportional phase+period correction.
-    Safety: octave error protection, confidence gating, output smoothing.
+    Onsets: bass energy adaptive threshold OR SuperFlux median threshold.
+    BPM estimation: generalized FFT autocorrelation of the onset function (~4 s).
+    Tracking: competing PI-PLL agents seeded from autocorrelation peaks, phase-aligned
+    to the last onset; the best agent (sticky, tempo-agreement tie-break) drives
+    is_metric_beat and predicted_next_beat.
+    Output streams: is_beat (raw onset + cooldown) and is_metric_beat (PLL-validated).
     """
 
     def __init__(
@@ -83,21 +100,33 @@ class BeatDetector:
         self._frame_rate = sample_rate / hop_size  # ~43 fps at 44100/1024
         self._frame_dur = 1.0 / self._frame_rate  # ~23ms
 
-        # --- Beat detection ---
-        # Energy history (~1.5 seconds for threshold)
+        # --- Onset detection function (ODF) ---
+        # Two half-wave rectified increase detectors, each normalized by its own
+        # running maximum, averaged into a 0..1 ODF:
+        #   bass_diff = max(0, bass - max(bass[n-1], bass[n-2]))  (kick attacks;
+        #              a level detector would re-fire on the decaying tail)
+        #   superflux  = mel-domain log-compressed flux from AudioAnalyzer
+        # The running maxima decay over ~12 s but never below 10% of a very slow
+        # peak hold, so a long breakdown cannot inflate pad noise into onsets.
         history_len = int(self._frame_rate * 1.5)
-        self._bass_history: deque[float] = deque(maxlen=max(history_len, 30))
-
-        # --- Flux-based onset detection ---
-        # Log compression parameter (gamma ~ 100 for log(1 + gamma * |X|))
-        self._flux_gamma: float = 100.0
-        # Flux onset threshold history (~0.2 seconds for adaptive median)
-        flux_thresh_len = max(int(self._frame_rate * 0.2), 5)
-        self._flux_onset_history: deque[float] = deque(maxlen=flux_thresh_len)
-        self._flux_threshold_mult: float = 1.5  # Multiplier over median for flux onset
+        self._bass_prev: deque[float] = deque(maxlen=2)
+        self._bass_diff_ref: float = 1e-6
+        self._bass_diff_peak: float = 1e-6
+        self._flux_ref: float = 1e-6
+        self._flux_peak: float = 1e-6
+        self._ref_decay: float = 0.998  # ~12 s time constant at 43 fps
+        self._peak_decay: float = 0.99995  # ~8 min
+        self._ref_floor_ratio: float = 0.1
+        # ODF history (~1 s) for the adaptive threshold
+        self._odf_history: deque[float] = deque(maxlen=max(int(self._frame_rate * 1.0), 10))
+        self._odf_threshold_floor: float = 0.12
+        self._odf_threshold_sigmas: float = 1.5
 
         # Beat timing
-        self._last_beat_time: float = 0.0
+        self._last_beat_time: float = 0.0  # Last raw beat (is_beat)
+        self._last_onset_time: float = 0.0  # Last onset of any kind (feeds agents)
+        self._last_metric_beat_time: float = 0.0  # Last PLL-validated beat
+        self._onset_min_gap: float = 0.060  # Same transient spans 2-3 frames
 
         # --- Autocorrelation BPM estimation ---
         # Onset function buffer (~4 seconds for autocorrelation)
@@ -117,18 +146,24 @@ class BeatDetector:
         self._frame_count: int = 0
         self._acorr_interval: int = max(1, int(self._frame_rate * 0.5))  # ~22 frames
 
-        # Raw autocorrelation BPM (before PLL)
+        # Raw autocorrelation BPM (before PLL) and the last weighted curve
         self._raw_bpm: float = 0.0
         self._raw_confidence: float = 0.0
+        self._last_weighted_corr: np.ndarray | None = None
+        self._last_corr_lag_min: int = self._lag_min
 
         # --- Multi-Agent PLL (Phase-Locked Loop) ---
         # Each agent is a competing beat hypothesis with its own PI-PLL
         self._agents: list[BeatAgent] = []
+        self._best_agent: BeatAgent | None = None  # Sticky choice (hysteresis)
         self._max_agents: int = 15
         self._initial_agents: int = 5
-        self._agent_kill_ratio: float = 0.8  # Kill below 80% of best score
+        self._agent_kill_ratio: float = 0.8  # Kill below 80% of best score (after grace)
         self._agent_max_misses: int = 8  # Kill after 8 consecutive misses
         self._agent_confirmation_window: float = 0.050  # ±50ms
+        # Best agent must have at least this score (~50% hit rate) before its
+        # phase is trusted to gate onsets (is_metric_beat) or drive predictions.
+        self._agent_trust_score: float = 5.0
 
         # PI-PLL gains (applied to all agents)
         self._pll_kp: float = 0.25  # Phase correction gain
@@ -197,78 +232,95 @@ class BeatDetector:
         now = timestamp if timestamp is not None else time.monotonic()
         info = BeatInfo()
 
-        # --- 1. Beat detection (energy-based, adaptive threshold) ---
+        # --- 1. Onset detection function ---
         bass = features.bass_energy
-        self._bass_history.append(bass)
+        prev_bass_max = max(self._bass_prev) if self._bass_prev else bass
+        self._bass_prev.append(bass)
+        bass_diff = max(0.0, bass - prev_bass_max)
+        flux = max(0.0, features.superflux_onset)
 
-        if len(self._bass_history) < 10:
-            self._onset_buffer.append(0.0)
+        # Normalization references: fast-decaying running max with a slow peak floor
+        self._bass_diff_peak = max(bass_diff, self._bass_diff_peak * self._peak_decay)
+        self._flux_peak = max(flux, self._flux_peak * self._peak_decay)
+        self._bass_diff_ref = max(
+            bass_diff,
+            self._bass_diff_ref * self._ref_decay,
+            self._ref_floor_ratio * self._bass_diff_peak,
+        )
+        self._flux_ref = max(
+            flux,
+            self._flux_ref * self._ref_decay,
+            self._ref_floor_ratio * self._flux_peak,
+        )
+        bass_norm = bass_diff / (self._bass_diff_ref + 1e-9)
+        flux_norm = flux / (self._flux_ref + 1e-9)
+        onset_val = float(np.clip(0.5 * (bass_norm + flux_norm), 0.0, 1.0))
+
+        self._onset_buffer.append(onset_val)
+        self._odf_history.append(onset_val)
+
+        if len(self._odf_history) < 10:
             return info
 
-        history = np.array(self._bass_history)
-        avg = float(np.median(history))
-        variance = float(np.var(history))
+        # Adaptive threshold: mean + k*std over ~1 s, with an absolute floor
+        odf_arr = np.fromiter(self._odf_history, dtype=float, count=len(self._odf_history))
+        threshold = max(
+            self._odf_threshold_floor,
+            float(np.mean(odf_arr) + self._odf_threshold_sigmas * np.std(odf_arr)),
+        )
 
-        # Adaptive threshold (Parallelcube spec): variance 0 → 1.55, variance 0.02 → 1.25
-        threshold = float(np.clip(
-            1.55 - (variance / 0.02) * 0.30,
-            1.25, 1.55,
-        ))
+        # An onset is a rising edge of the ODF above threshold; the same transient
+        # spans 2-3 frames (flux leads bass by one hop), so require a minimum gap.
+        # Cooldowns are applied later, separately for the raw and metric streams.
+        is_onset = (
+            onset_val > threshold
+            and (now - self._last_onset_time) >= self._onset_min_gap
+        )
 
-        # --- Flux-based onset detection (SuperFlux) ---
-        # SuperFlux is already log-compressed + max-filtered in AudioAnalyzer
-        compressed_flux = features.superflux_onset
-        self._flux_onset_history.append(compressed_flux)
-
-        # Compute flux adaptive threshold (moving median over ~0.2s window)
-        flux_beat = False
-        flux_median = 0.0
-        if len(self._flux_onset_history) >= 5:
-            flux_median = float(np.median(list(self._flux_onset_history)))
-            flux_beat = compressed_flux > flux_median * self._flux_threshold_mult
-
-        # Onset function: combine energy and flux for autocorrelation BPM
-        energy_onset = max(0.0, bass - avg * threshold)
-        flux_onset = max(0.0, compressed_flux - flux_median) if flux_median > 0 else 0.0
-        onset_val = energy_onset + 0.5 * flux_onset
-        self._onset_buffer.append(onset_val)
-
-        # Beat trigger: either energy or flux onset (cooldown still applies)
-        energy_beat = bass > avg * threshold
-        past_cooldown = (now - self._last_beat_time) >= self.cooldown_sec
-        is_beat = (energy_beat or flux_beat) and past_cooldown
-
-        if is_beat:
-            info.is_beat = True
-            # Beat strength: max of energy-based and flux-based strength
-            energy_strength = (bass - avg * threshold) / (avg * threshold + 1e-6)
-            flux_strength = (compressed_flux - flux_median * self._flux_threshold_mult) / (flux_median * self._flux_threshold_mult + 1e-6) if flux_median > 0 else 0.0
-            info.beat_strength = float(np.clip(max(energy_strength, flux_strength), 0, 1))
-            self._last_beat_time = now
+        if is_onset:
+            self._last_onset_time = now
+            strength = onset_val
 
             # Track strong onsets for coasting behavior
-            if info.beat_strength > 0.3:
+            if strength > 0.3:
                 self._last_strong_onset_time = now
 
-            # --- Confirm pending predictions ---
+            # Confirm pending predictions (any onset within tolerance counts)
             for idx in range(len(self._prediction_window)):
                 pred_time, confirmed = self._prediction_window[idx]
                 if not confirmed and abs(now - pred_time) <= self._prediction_tolerance:
                     self._prediction_window[idx] = (pred_time, True)
                     break
 
-            # --- Metric-beat validation ---
-            # Check best agent's pre-correction phase alignment with this onset.
-            # is_metric_beat: True iff onset arrives where the dominant PLL hypothesis
-            # expects a beat (within ±_agent_confirmation_window). Falls back to raw
-            # is_beat while confidence is below the gate (PLL warm-up).
-            info.is_metric_beat = self._check_metric_beat_alignment()
+            # Alignment with the best agent, evaluated BEFORE correction so it
+            # reflects where the PLL expected the beat to land.
+            aligned = self._onset_aligned_with_best()
 
-            # --- Multi-agent PLL correction on detected beat ---
-            # Information gate: only correct agents on strong onsets
-            # (weak onsets/noise don't disturb agent phase during coasting)
-            if info.beat_strength > 0.2:
-                self._correct_agents_on_beat(now)
+            # Agents are confirmed with the ODF value as weight (relative to the
+            # loudest recent transient), so dense weak onsets (hats, 16th bass)
+            # cannot outscore kicks.
+            if strength > 0.2:
+                self._correct_agents_on_beat(now, strength)
+
+            # Raw beat stream: onset past the raw cooldown.
+            if (now - self._last_beat_time) >= self.cooldown_sec:
+                info.is_beat = True
+                info.beat_strength = strength
+                self._last_beat_time = now
+
+            # Metric beat stream: onset where the trusted PLL expects a beat,
+            # at most one per half period. Independent of the raw cooldown so a
+            # syncopated hit that consumed the raw cooldown cannot swallow the
+            # real kick. Falls back to the raw stream while no agent is trusted.
+            if self._pll_trusted():
+                metric_gap = 0.5 * self._best_agent.period
+                if aligned and (now - self._last_metric_beat_time) >= metric_gap:
+                    info.is_metric_beat = True
+                    info.beat_strength = max(info.beat_strength, strength)
+                    self._last_metric_beat_time = now
+            elif info.is_beat:
+                info.is_metric_beat = True
+                self._last_metric_beat_time = now
 
         # --- 1b. Per-band onset detection ---
         info = self._detect_per_band_onsets(features, now, info)
@@ -276,14 +328,16 @@ class BeatDetector:
         # --- 2. Advance all agent phases ---
         self._advance_agents(now)
 
-        # --- 3. Autocorrelation BPM estimation (every ~0.5s) ---
+        # --- 3. Autocorrelation BPM estimation + agent housekeeping (every ~0.5s) ---
         self._frame_count += 1
         buf_len = len(self._onset_buffer)
         if buf_len >= self._lag_max + 10 and self._frame_count % self._acorr_interval == 0:
             self._estimate_bpm_autocorrelation()
-            self._seed_agents_from_autocorrelation()
+            self._seed_agents_from_autocorrelation(now)
+            self._prune_agents(now)
 
-        # --- 4. Sync best agent to output vars ---
+        # --- 4. Pick the best agent (with hysteresis) and sync output vars ---
+        self._select_best_agent()
         self._sync_best_agent()
 
         # --- 5. Output: combine PLL + confidence gating + smoothing ---
@@ -292,18 +346,20 @@ class BeatDetector:
         else:
             pll_bpm = self._raw_bpm
 
-        # --- Sidechain compression detection (mid-frequency periodic modulation) ---
+        # Sidechain compression detection (mid-frequency periodic modulation)
         mid_flux = float(np.sum(features.band_energies[2:5]))
         self._mid_flux_history.append(mid_flux)
         sidechain_detected = self._detect_sidechain()
 
-        # --- Confidence: blend autocorrelation + prediction ratio ---
+        # Confidence: blend autocorrelation SNR + prediction ratio, then scale by
+        # tempo agreement between the best agent and the autocorrelation estimate
         self._update_prediction_confidence(now)
         raw_confidence = 0.5 * self._raw_confidence + 0.5 * self._prediction_confidence
+        agreement = self._agent_agreement_factor()
 
-        # --- Coasting: tiered confidence decay without strong onsets ---
+        # Coasting: tiered confidence decay without strong onsets
         self._update_coasting(now, sidechain_detected)
-        self._confidence = raw_confidence * self._coast_confidence_mult
+        self._confidence = raw_confidence * self._coast_confidence_mult * agreement
         self._locked = self._confidence > 0.8
 
         # BPM smoothing: light EMA on PLL output (multi-agent already provides stability)
@@ -313,7 +369,6 @@ class BeatDetector:
             if self._smooth_bpm == 0:
                 self._smooth_bpm = pll_bpm
             else:
-                # Simple EMA: fast enough to track, slow enough to avoid frame jitter
                 self._smooth_bpm += self._bpm_drift_alpha * (pll_bpm - self._smooth_bpm)
 
             self._stable_bpm = self._smooth_bpm
@@ -334,55 +389,51 @@ class BeatDetector:
         elif self._smooth_bpm == 0:
             self._display_bpm = 0
 
-        # Auto-cooldown: set cooldown to ~75% of beat period when BPM is known
+        # Raw cooldown: preset value is the floor, scaled up to 75% of the beat
+        # period once the tempo is known.
         if self.auto_cooldown and self._display_bpm > 0:
             beat_period = 60.0 / self._display_bpm
-            self.cooldown_sec = max(0.30, beat_period * 0.75)
+            self.cooldown_sec = max(self._manual_cooldown_sec, beat_period * 0.75)
 
         # Fill output
         info.bpm = round(self._display_bpm, 1)
         info.bpm_confidence = self._confidence
         info.time_since_beat = now - self._last_beat_time
 
-        # Predict next beat from PLL
-        if self._pll_period > 0 and self._last_beat_time > 0:
-            info.predicted_next_beat = self._last_beat_time + self._pll_period
+        # Predict the next beat from the best agent's phase, not from the last
+        # raw onset: false onsets must not move the prediction.
+        best = self._best_agent
+        if best is not None and best.period > 0:
+            info.predicted_next_beat = now + (1.0 - best.phase) * best.period
 
         return info
 
     # --- Multi-agent PLL methods ---
 
-    def _check_metric_beat_alignment(self) -> bool:
-        """Return True if current onset is aligned with the best agent's expected beat.
+    def _pll_trusted(self) -> bool:
+        """True when the best agent has earned enough confirmations to gate onsets."""
+        best = self._best_agent
+        return (
+            best is not None
+            and best.period > 0
+            and best.score >= self._agent_trust_score
+        )
 
-        Must be called BEFORE _correct_agents_on_beat — the agent's phase is then
-        pre-correction, reflecting where the PLL thought the beat would land.
-
-        Falls back to True when PLL confidence is below the gate (warm-up window):
-        the multi-agent system has not yet locked, so we should not gate flashes —
-        downstream consumers see raw onsets until the PLL stabilises.
-        """
-        # Warm-up: not enough confidence to trust the filter — pass through raw onsets.
-        if self._confidence < self._confidence_gate:
-            return True
-
-        if not self._agents:
-            return True
-
-        best = max(self._agents, key=lambda a: a.score)
-        if best.period <= 0:
-            return True
-
+    def _onset_aligned_with_best(self) -> bool:
+        """True if the current onset lands within the confirmation window of the
+        best agent's expected beat. Must be called BEFORE _correct_agents_on_beat."""
+        best = self._best_agent
+        if best is None or best.period <= 0:
+            return False
         phase_error = best.phase
         if phase_error > 0.5:
             phase_error -= 1.0
-        time_error = abs(phase_error * best.period)
+        return abs(phase_error * best.period) <= self._agent_confirmation_window
 
-        return time_error <= self._agent_confirmation_window
-
-    def _correct_agents_on_beat(self, now: float) -> None:
-        """Correct all agents when a beat is detected. Agents whose predicted
-        phase aligns with the beat get score boost + PI correction."""
+    def _correct_agents_on_beat(self, now: float, weight: float = 1.0) -> None:
+        """Correct all agents when an onset is detected. Agents whose predicted
+        phase aligns with the onset get a score boost (scaled by onset weight)
+        and a PI correction."""
         period_min = 60.0 / self.bpm_max
         period_max = 60.0 / self.bpm_min
 
@@ -398,8 +449,8 @@ class BeatDetector:
             time_error = abs(phase_error * agent.period)
 
             if time_error <= self._agent_confirmation_window:
-                # Beat confirms this agent's prediction
-                agent.score += 1.0
+                # Onset confirms this agent's prediction
+                agent.score += weight
                 agent.consecutive_misses = 0
 
                 # Proportional phase correction
@@ -418,10 +469,9 @@ class BeatDetector:
                 agent.period = max(period_min, min(period_max, agent.period))
 
     def _advance_agents(self, now: float) -> None:
-        """Advance phase of all agents by one frame. Record predictions from
-        the best agent on phase wrap."""
-        best_agent = max(self._agents, key=lambda a: a.score) if self._agents else None
-
+        """Advance phase of all agents by one frame. On phase wrap (a prediction)
+        decay the agent's score, count misses, and record the best agent's
+        prediction for the prediction-ratio confidence."""
         for agent in self._agents:
             if agent.period <= 0:
                 continue
@@ -431,96 +481,142 @@ class BeatDetector:
             agent.integral_error *= 0.999
 
             if agent.phase >= 1.0:
-                # Phase wrap — agent expected a beat here
                 overshoot = agent.phase - 1.0
                 agent.phase %= 1.0
+                agent.score *= AGENT_SCORE_DECAY
 
-                # Only record prediction from best agent
-                if agent is best_agent:
+                if agent is self._best_agent:
                     predicted_time = now - overshoot * agent.period
                     self._prediction_window.append((predicted_time, False))
 
-                # If this agent expected a beat but none was detected recently,
-                # increment misses (checked via time since last beat)
-                time_since_beat = now - self._last_beat_time if self._last_beat_time > 0 else 999
-                if time_since_beat > self._agent_confirmation_window:
+                # No onset near this prediction (a late onset within the window
+                # will still confirm and reset the counter)
+                time_since_onset = (
+                    now - self._last_onset_time if self._last_onset_time > 0 else 999.0
+                )
+                if time_since_onset > self._agent_confirmation_window:
                     agent.consecutive_misses += 1
 
-    def _seed_agents_from_autocorrelation(self) -> None:
-        """Seed new agents from top autocorrelation peaks. Prune weak agents."""
-        if self._raw_bpm <= 0:
+    def _seed_agents_from_autocorrelation(self, now: float) -> None:
+        """Seed new agents from the top autocorrelation peaks.
+
+        New agents are phase-aligned to the last onset (an agent seeded at an
+        arbitrary phase can never be confirmed and would be pruned regardless of
+        whether its tempo is right) and inherit 0.9x the best score (IBT), so
+        they can compete with established agents when the tempo changes.
+        """
+        if self._raw_bpm <= 0 or self._last_weighted_corr is None:
             return
 
-        # Find top N peaks from the last autocorrelation run
-        # Use the stored onset buffer to find multiple peaks
-        onset = np.array(self._onset_buffer)
-        onset = onset - np.mean(onset)
-        energy = np.sum(onset ** 2)
-        if energy < 1e-10:
-            return
+        weighted = self._last_weighted_corr
+        lag_min = self._last_corr_lag_min
 
-        lag_min = self._lag_min
-        lag_max = min(self._lag_max, len(onset) - 1)
-        if lag_min >= lag_max:
-            return
-
-        # FFT-based generalized autocorrelation (reuse the computation)
-        pad_len = self._fft_pad_len * 2
-        padded = np.zeros(pad_len)
-        padded[:len(onset)] = onset
-        spectrum = np.fft.rfft(padded)
-        gac = np.fft.irfft(np.abs(spectrum) ** 0.5)
-        zero_lag = gac[0]
-        if zero_lag < 1e-10:
-            return
-
-        correlations = gac[lag_min:lag_max + 1] / zero_lag
-        n_corr = len(correlations)
-        n_weights = len(self._perceptual_weights)
-        if n_corr <= n_weights:
-            weighted = correlations * self._perceptual_weights[:n_corr]
-        else:
-            weighted = correlations.copy()
-            weighted[:n_weights] *= self._perceptual_weights
-
-        # Find top N peaks (local maxima)
+        # Top N local maxima
         candidate_periods = []
         for i in range(1, len(weighted) - 1):
             if weighted[i] > weighted[i - 1] and weighted[i] > weighted[i + 1]:
-                lag = lag_min + i
-                period = lag * self._frame_dur
+                period = (lag_min + i) * self._frame_dur
                 candidate_periods.append((weighted[i], period))
-
-        # Sort by score descending, take top N
         candidate_periods.sort(reverse=True)
         candidates = candidate_periods[:self._initial_agents]
 
-        # Also include the primary BPM estimate
+        # Always include the primary BPM estimate
         primary_period = 60.0 / self._raw_bpm
         if not any(abs(p - primary_period) / primary_period < 0.05 for _, p in candidates):
             candidates.insert(0, (1.0, primary_period))
 
-        # Seed new agents for candidates not already tracked
+        best_score = max((a.score for a in self._agents), default=0.0)
+        inherited = 0.9 * best_score if self._agents else 1.0
+
         for _, period in candidates:
             already_tracked = any(
                 abs(a.period - period) / a.period < 0.05
                 for a in self._agents if a.period > 0
             )
-            if not already_tracked and len(self._agents) < self._max_agents:
-                self._agents.append(BeatAgent(period=period))
+            if already_tracked or len(self._agents) >= self._max_agents:
+                continue
 
-        # Prune weak agents
-        if self._agents:
-            best_score = max(a.score for a in self._agents)
-            self._agents = [
-                a for a in self._agents
-                if a.score >= best_score * self._agent_kill_ratio
-                and a.consecutive_misses < self._agent_max_misses
-            ]
+            phase = 0.0
+            if self._last_onset_time > 0 and (now - self._last_onset_time) < 2.0 * period:
+                phase = ((now - self._last_onset_time) / period) % 1.0
 
-        # Score decay: prevent old agents from accumulating unbounded scores
+            self._agents.append(
+                BeatAgent(period=period, phase=phase, score=inherited, born=now)
+            )
+
+    def _prune_agents(self, now: float) -> None:
+        """Drop agents with too many consecutive misses, or (once past their
+        grace period) scoring below the kill ratio of the best score."""
+        if not self._agents:
+            return
+
+        best_score = max(a.score for a in self._agents)
+        kept = []
         for agent in self._agents:
-            agent.score *= 0.95
+            if agent.consecutive_misses >= self._agent_max_misses:
+                continue
+            in_grace = (now - agent.born) < AGENT_GRACE_BEATS * agent.period
+            if not in_grace and agent.score < best_score * self._agent_kill_ratio:
+                continue
+            kept.append(agent)
+        self._agents = kept
+
+        if self._best_agent is not None and self._best_agent not in self._agents:
+            self._best_agent = None
+
+    def _select_best_agent(self) -> None:
+        """Choose the output agent with hysteresis.
+
+        Agents are ranked by score times a tempo prior centred on the
+        autocorrelation estimate: the autocorrelation decides the gross tempo,
+        agents track phase and fine period. The current best is kept while its
+        ranked score is within AGENT_SWITCH_MARGIN of the top.
+        """
+        if not self._agents:
+            self._best_agent = None
+            return
+
+        ranked = {id(a): a.score * self._tempo_prior(a) for a in self._agents}
+        top_score = max(ranked.values())
+        current = self._best_agent
+        if (
+            current is not None
+            and current in self._agents
+            and ranked[id(current)] * AGENT_SWITCH_MARGIN >= top_score
+        ):
+            return
+
+        self._best_agent = max(self._agents, key=lambda a: ranked[id(a)])
+
+    def _tempo_prior(self, agent: BeatAgent) -> float:
+        """Weight for agent selection: 1.0 at the autocorrelation tempo, falling
+        off as a log-Gaussian (sigma ~8%), floored so a much better-scoring agent
+        can still win when the autocorrelation estimate is off."""
+        if agent.period <= 0 or self._raw_bpm <= 0:
+            return 1.0
+        log_ratio = np.log2((60.0 / agent.period) / self._raw_bpm)
+        return max(0.3, float(np.exp(-0.5 * (log_ratio / 0.08) ** 2)))
+
+    def _agent_agreement_factor(self) -> float:
+        """Confidence multiplier: 1.0 when the best agent matches the
+        autocorrelation tempo, 0.8 for an octave relation, 0.5 otherwise."""
+        best = self._best_agent
+        if best is None or best.period <= 0 or self._raw_bpm <= 0:
+            return 1.0
+        ratio = (60.0 / best.period) / self._raw_bpm
+        if abs(ratio - 1.0) < 0.05:
+            return 1.0
+        if abs(ratio - 2.0) < 0.1 or abs(ratio - 0.5) < 0.025:
+            return 0.8
+        return 0.5
+
+    def _sync_best_agent(self) -> None:
+        """Sync _pll_period and _pll_phase from the selected best agent."""
+        best = self._best_agent
+        if best is not None:
+            self._pll_period = best.period
+            self._pll_phase = best.phase
+        # If no agents, _pll_period stays at whatever it was (or 0)
 
     def _detect_sidechain(self) -> bool:
         """Detect sidechain compression pumping in mid-frequency bands.
@@ -734,6 +830,7 @@ class BeatDetector:
         and reduce octave errors. Perceptual log-Gaussian weighting resolves
         ambiguity toward musically plausible tempi.
         """
+        self._last_weighted_corr = None
         onset = np.array(self._onset_buffer)
 
         # Subtract mean to remove DC offset
@@ -773,6 +870,10 @@ class BeatDetector:
         else:
             weighted = correlations.copy()
             weighted[:n_weights] *= self._perceptual_weights
+
+        # Keep the weighted curve for agent seeding
+        self._last_weighted_corr = weighted
+        self._last_corr_lag_min = lag_min
 
         # Find peak
         peak_idx = np.argmax(weighted)
@@ -828,14 +929,22 @@ class BeatDetector:
 
     def reset(self) -> None:
         """Reset all state."""
-        self._bass_history.clear()
-        self._flux_onset_history.clear()
+        self._bass_prev.clear()
+        self._bass_diff_ref = 1e-6
+        self._bass_diff_peak = 1e-6
+        self._flux_ref = 1e-6
+        self._flux_peak = 1e-6
+        self._odf_history.clear()
         self._onset_buffer.clear()
         self._frame_count = 0
         self._last_beat_time = 0.0
+        self._last_onset_time = 0.0
+        self._last_metric_beat_time = 0.0
         self._raw_bpm = 0.0
         self._raw_confidence = 0.0
+        self._last_weighted_corr = None
         self._agents.clear()
+        self._best_agent = None
         self._pll_phase = 0.0
         self._pll_period = 0.0
         self._smooth_bpm = 0.0
@@ -885,6 +994,11 @@ class BeatDetector:
             a for a in self._agents
             if period_min <= a.period <= period_max
         ]
+        if self._best_agent is not None and self._best_agent not in self._agents:
+            self._best_agent = None
+        # Prediction window covers ~10 s at the new maximum tempo
+        window_size = max(int(10.0 * bpm_max / 60.0), 20)
+        self._prediction_window = deque(self._prediction_window, maxlen=window_size)
 
     @property
     def current_bpm(self) -> float:
