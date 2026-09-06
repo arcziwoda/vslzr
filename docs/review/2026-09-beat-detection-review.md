@@ -297,3 +297,89 @@ Remaining, by design or deferred:
   Tightening `is_new_prediction` to a fraction of the period would remove it.
 - No real annotated audio yet. The synthetic scenarios are exact but idealized; the next step
   is 3-5 real tracks with hand-corrected beat annotations on 30 s excerpts.
+
+## Second pass (2026-09-06): reconnaissance beyond the beat path
+
+Method: four narrow read-only reviews (analyzer vs spec, section detector, server glue,
+engine light path) plus a robustness probe that runs the detector on perturbed synthetic
+audio (gain -20/-40 dB, DC offset, hard clipping, 0.6 s reverb, 150 Hz high-pass + reverb
+as a room-mic stand-in, 48 kHz, 12/20 ms timing jitter, tempo step 126->134, tempo ramps
+124->136, song change with and without a gap). Every finding below was confirmed against the
+code; "sim" marks findings confirmed only by a scripted simulation from the review, not by
+the synthetic audio benchmark.
+
+Robustness probe (techno preset, metric stream): gain, DC, clipping, reverb, high-pass and
+48 kHz all F = 1.000. Tempo ramps up to 0.2 BPM/s F = 1.000. Tempo step and song change
+lose 2-4 s of beats while the agents re-lock (Miss 3-8/min, CMLc ~0.48 because continuity
+breaks once). 12 ms jitter: F 0.872 before F26, 1.000 after. 20 ms jitter: 0.979 after.
+
+### Fixed in this pass
+
+| # | Where | Finding | Fix |
+|---|---|---|---|
+| F25 | `server/app.py` `process_all` | `is_metric_beat` latched inside `if is_beat`, re-coupling the two streams the detector had separated. 40% of metric beats dropped on DnB, 54% on trap. | Independent latch. |
+| F26 | `beat_detector.py` selection/pruning | A fresh seed inherits 0.9x the best score; when the autocorrelation wobbled one lag under jitter (130 -> 123 BPM) the tempo prior favoured the fresh seed and it took the output with zero confirmations. | Challenger needs `AGENT_CHALLENGER_MIN_HITS = 3` own confirmations to become best or to set the pruning bar. |
+| F27 | `process_all` timestamps | Newest frame stamped at capture completion; the onset it carries happened ~one hop earlier. End-to-end flashes 44 ms late. | Stamp newest frame at `now - hop`. Err 44 -> 20 ms, techno_breakdown 0.946 -> 0.996. |
+| F28 | `_sync_sample_rate` | Compared the device rate with the config rate, not the live analyzer: 48 kHz device then 44.1 kHz device = no rebuild. Rebuild also reverted preset BPM range, cooldown and bass boost. | Compare with `analyzer.sample_rate`; carry the tuning over. |
+| F29 | `audio_loop` | `process_all()` outside the try: any analysis exception killed the loop silently, lights frozen on. | Guarded, logged, muted for 5 s. |
+| F30 | `lifespan` | `CALIBRATION_DELAY_MS < 0` ignored (`> 0` guard) although documented. | `!= 0`. |
+| F31 | WS payload | UI indicator showed the raw stream while the lights flash on the metric stream; beats consumed on non-broadcast ticks (50 -> 30 Hz) never reached the UI. | `is_beat` = stream driving the lights, latched across the gate; `is_raw_beat`, `is_metric_beat` added. |
+| F32 | `analyzer.py` `_compute_band_slices` | Adjacent bands shared their boundary bin (a 65 Hz tone counted in sub_bass and bass). | Exclusive end bin. |
+| F33 | `analyzer.py` STFT assembly (= old F13) | Window built from exactly one previous frame; with hop 512 the spectrum peak was 5 dB low, hop 256 20 dB low. | `fft_size` sample history buffer. |
+| F34 | `analyzer.py` RMS normalization | Min-max over 5 s with an absolute floor of 1e-4: a steady-level signal (range 2% of level) was stretched to full scale, `features.rms` std 0.22 on constant noise. | Range floored at 25% of the window peak. |
+| F35 | `engine.py` brightness combine | Flash added then clipped by the intensity cap: on a loud passage or drop the flash contributed nothing (0.838 with and without). | Base capped at `max_brightness * 0.85`, flash uses the headroom, cap stays hard. |
+| F36 | `engine.py` `set_safe_mode(False)` | Restored `_min_flash_interval = 0` (no limit) instead of the configured `max_flash_hz`. | Restores the base limit. Test updated (it asserted the bug). |
+
+Benchmarks after the pass (`step14`): detector metric stream F = 1.000 for techno, synco,
+jitter, house (default and preset), dnb preset 0.911, trap preset 0.673, breakdown 0.812-0.825,
+silence 0.994. End-to-end metric config: techno/synco/house/breakdown 0.996, jitter 0.920,
+dnb 0.934, trap 0.784, silence 0.890; mean signed error 10-23 ms (was 34-45).
+
+### Confirmed, not fixed (design or look changes; decide before touching)
+
+Section detector (`audio/section_detector.py`, all sim):
+
+- S1 DROP <-> SUSTAIN limit cycle: DROP exits unconditionally after 22 frames, SUSTAIN re-enters
+  DROP after 43 frames whenever the score stays high; 1.5 s period, intensity sawtooth
+  0.65 <-> 1.0, hue rotation and flash tau flip with it.
+- S2 Pause detection uses an absolute `rms_raw < 0.01`: a quiet pad breakdown (-42 dBFS) is a
+  pause; > 5 s of it does a full cold restart (2 s lockout, 8 s doubled threshold), so the drop
+  out of the breakdown is suppressed. Low capture gain makes the detector permanently inert.
+- S3 Seeding on the first frame above the same threshold (intro) seeds the long bass EMA near
+  zero; the first full bar is a DROP 0.2 s in and the engine strobes at the top of every track.
+- S4 Patin C adaptive threshold is inert (variance EMA ~2e-6); threshold is a constant 0.19.
+- S5 BUILDUP unreachable for real risers (slope threshold is per frame: 0.043 RMS/s) and only
+  reachable from BREAKDOWN.
+- S6 BREAKDOWN self-terminates after ~12 s because the long EMA follows the quiet level.
+- S7/S8 Dead QUIET hysteresis branch; frame-count constants not derived from the frame rate.
+
+Engine (`visualizer/engine.py`, agent measured with the real engine):
+
+- E3 `blended_b = max(w_g * gen, w_r * reactive) + ...` scales before the max: both layers at
+  0.9 give 0.52 at weight 0.5, 0.79 at 0.15/0.85. Brightness sags ~40% at mid energy.
+- E4 Palette spread for freq/mirror modes divides the normalized spread by `n_lights - 1` again;
+  20 lights span 2.6 degrees of hue (chase does it right).
+- E5 Hue/sat/attack/release EMAs are per tick, not dt-normalized; `_brightness_delta_limit`
+  documented for 30 Hz, loop runs at 50 Hz.
+- E6 3 Hz flash limiter halves the flash rate above 180 BPM (dnb preset goes to 185).
+- E7 "uniform" spatial mode applies group phase offsets (hues 280/280/280/280/333/333).
+- Low: sparkle light count not recomputed on `set_num_lights`; dead state
+  (`_buildup_progress`, `_breakdown_hue_shift`, `_base_max_flash_hz` now read); calibration tick
+  skips the generative layer and bypasses the limiter.
+
+Server / UI:
+
+- U1 Every WS `onopen` replays localStorage: `set_genre` resets the beat detector on a transient
+  reconnect mid-track, and the replayed bass boost / brightness / calibration override `.env`.
+- U2 `_apply_genre_preset(current_genre)` at startup overwrites `SPATIAL_MODE`, attack/release
+  and bass boost from `.env` with the techno preset.
+
+Analyzer, low: auto-gain decay 0.995 per frame (8% faster at 48 kHz, "~5 s" comment wrong);
+`spectrum` dBFS 6 dB low (UI only); bass boost clip at 1.5 (F12) unchanged.
+
+Detector, design tension: under timing jitter the metric stream is exact (F 1.000) while the
+predictive stream follows the wobbling PLL phase (end-to-end F 0.920, 9 of 120 flashes
+70-200 ms off). The engine prefers predictive whenever confidence >= 0.6.
+
+Trap remains fragile: 15 agents at 61-90 BPM all score 3.5-4.5, so the population does not
+discriminate; the final BPM depends on the last switch. A metrical-level model is the fix.
