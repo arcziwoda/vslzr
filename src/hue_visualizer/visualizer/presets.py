@@ -123,7 +123,8 @@ class GenrePreset:
     hue_drift_speed: float
     # Default palette name (key into PALETTES dict)
     default_palette: str = "neon"
-    # Strobe frequency in Hz (auto-strobe burst speed)
+    # Strobe frequency in Hz (auto-strobe burst speed). The engine clamps to its
+    # physical max (8 Hz) and safe mode to 2 Hz (photosensitive-epilepsy guideline).
     strobe_frequency: float = 6.0
 
 
@@ -140,7 +141,7 @@ PRESETS: dict[str, GenrePreset] = {
         flash_tau=0.12,             # clean isolated pulses, 2% residual at next beat
         hue_drift_speed=4.0,        # full rotation ~90s, matches section length
         default_palette="techno",   # deep azure/blue/violet + red accent
-        strobe_frequency=2.5,       # aggressive but below 3 Hz safety
+        strobe_frequency=8.0,       # real strobe; bulbs cap around 8 Hz. Safe mode clamps to 2 Hz
     ),
     "house": GenrePreset(
         name="house",
@@ -154,7 +155,7 @@ PRESETS: dict[str, GenrePreset] = {
         flash_tau=0.15,             # warm tail, 4% residual at next beat
         hue_drift_speed=12.0,       # colorful, matches faster harmonic rhythm
         default_palette="house",    # magenta, rose, amber/gold, purple — disco heritage
-        strobe_frequency=1.5,       # gentle, groove-friendly
+        strobe_frequency=6.0,       # a touch softer than techno
     ),
     "dnb": GenrePreset(
         name="dnb",
@@ -168,7 +169,7 @@ PRESETS: dict[str, GenrePreset] = {
         flash_tau=0.08,             # razor-sharp pulses, 1.3% at next quarter note
         hue_drift_speed=18.0,       # fast rotation ~20s, matches high energy
         default_palette="dnb",      # neon green, cyan, blue, violet — laser convention
-        strobe_frequency=3.0,       # max safe — DnB drops demand intensity
+        strobe_frequency=8.0,       # DnB drops demand intensity
     ),
     "ambient": GenrePreset(
         name="ambient",
@@ -196,7 +197,7 @@ PRESETS: dict[str, GenrePreset] = {
         flash_tau=0.25,             # heavy sustained impact, visual 808 "boom"
         hue_drift_speed=6.0,        # moderate, matches verse/hook section pace
         default_palette="trap",     # red, purple, orange/gold, pink — high power
-        strobe_frequency=2.0,       # powerful but spacious, not frantic
+        strobe_frequency=6.0,       # powerful but spacious
     ),
 }
 

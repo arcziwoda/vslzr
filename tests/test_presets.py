@@ -20,7 +20,9 @@ class TestPresets:
             assert 0.5 <= p.bass_boost <= 5.0, f"{name}: bad bass_boost"
             assert 0.0 < p.attack_alpha <= 1.0, f"{name}: bad attack"
             assert 0.0 < p.release_alpha <= 1.0, f"{name}: bad release"
-            assert 0.0 <= p.strobe_frequency <= 3.0, f"{name}: strobe exceeds 3 Hz safety"
+            # The epilepsy limit is enforced by safe mode (2 Hz); presets stay within
+            # the bulbs' physical ceiling
+            assert 0.0 <= p.strobe_frequency <= 8.0, f"{name}: strobe exceeds the 8 Hz physical max"
 
     def test_preset_is_frozen(self):
         p = PRESETS["techno"]

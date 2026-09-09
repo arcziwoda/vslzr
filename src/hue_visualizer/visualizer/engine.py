@@ -545,8 +545,8 @@ class EffectEngine:
         self._strobe_frequency: float = 6.0         # Active frequency (may be clamped by safe mode)
         self._strobe_max_frequency: float = 8.0     # Physical max (~12.5 FPS bulb limit)
         self._strobe_duty_cycle: float = 0.3        # 30% on, 70% off — sharp punchy flash
-        self._strobe_drop_cycles: int = 8           # Cycles for drop burst
-        self._strobe_manual_cycles: int = 6         # Cycles for manual burst
+        self._strobe_drop_cycles: int = 12          # Cycles for drop burst (1.5 s at 8 Hz)
+        self._strobe_manual_cycles: int = 8         # Cycles for manual burst (1 s at 8 Hz)
 
         # --- Calibration mode ---
         # When active, tick() bypasses the full pipeline and outputs a simple
