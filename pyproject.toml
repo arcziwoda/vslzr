@@ -1,6 +1,6 @@
 [project]
 name = "vslzr"
-version = "1.5.0"
+version = "1.10.0"
 description = "Real-time music visualization for Philips Hue lights — FFT analysis, beat detection, and low-latency Entertainment API streaming"
 readme = "README.md"
 license = {text = "MIT"}
