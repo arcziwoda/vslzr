@@ -1491,10 +1491,6 @@ body::after {
       <input type="range" id="ctrlCalibDelay" min="-200" max="600" value="0" step="10">
       <span class="control-val" id="valCalibDelay">0ms</span>
     </div>
-    <div class="control">
-      <label data-hint="Gate reactive flashes on PLL-validated beats. Filters out hi-hat / snare onsets that don't match the dominant tempo. Toggle off to compare with raw onsets">PLL FILTER</label>
-      <button class="btn-calibrate" id="btnMetricFilter">PLL FILTER</button>
-    </div>
   </section>
 
   <section class="controls-row">
@@ -1838,12 +1834,6 @@ function syncUIState(d) {
   if (typeof d.calibration_mode === 'boolean') {
     var $cal = document.getElementById('btnCalibrate');
     if ($cal) $cal.classList.toggle('active', d.calibration_mode);
-  }
-
-  // Metric filter sync
-  if (typeof d.metric_filter === 'boolean') {
-    var $mf = document.getElementById('btnMetricFilter');
-    if ($mf) $mf.classList.toggle('active', d.metric_filter);
   }
 
   // Audio device sync
@@ -2351,13 +2341,6 @@ function initControls() {
   $btnCalib.addEventListener('click', function() {
     var isActive = $btnCalib.classList.toggle('active');
     send('set_calibration_mode', isActive);
-  });
-
-  // Metric filter toggle (PLL-validated reactive triggers)
-  var $btnMetric = document.getElementById('btnMetricFilter');
-  $btnMetric.addEventListener('click', function() {
-    var isActive = $btnMetric.classList.toggle('active');
-    send('set_metric_filter', isActive);
   });
 
   // Calibration delay slider

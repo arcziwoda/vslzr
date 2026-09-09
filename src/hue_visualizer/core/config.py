@@ -153,7 +153,7 @@ class Settings(BaseSettings):
         description="Gate reactive beat flashes on PLL-validated onsets (is_metric_beat) "
         "instead of raw onsets. Raw onsets flash on hi-hats, claps and syncopated hits; "
         "the metric filter only passes onsets where the tempo tracker expects a beat. "
-        "Can be toggled at runtime from the UI.",
+        "Set via METRIC_BEAT_FILTER; the set_metric_filter WS control remains for scripts.",
     )
 
     # Generative Layer Configuration (Task 1.1)
