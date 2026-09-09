@@ -1,0 +1,28 @@
+The file beats_lstm_2016.npz in this directory contains the trained weights of
+the online beat-tracking LSTM ensemble distributed with madmom
+(https://github.com/CPJKU/madmom, models/beats/2016/beats_lstm_[1-8].pkl),
+converted to a single NumPy archive together with the logarithmic filterbank
+matrix used as the network input. No weights were modified.
+
+Copyright (c) 2016 Sebastian Böck, Filip Korzeniowski, Jan Schlüter,
+Florian Krebs, Gerhard Widmer (Department of Computational Perception,
+Johannes Kepler University Linz).
+
+These weights are licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License
+(CC BY-NC-SA 4.0), https://creativecommons.org/licenses/by-nc-sa/4.0/.
+
+This means: you may use, share and adapt them for NON-COMMERCIAL purposes only,
+you must give appropriate credit, and adapted versions must be distributed
+under the same license. The rest of this repository is licensed separately;
+a commercial deployment of this application must replace this model.
+
+Please cite when using the model:
+
+  Sebastian Böck and Markus Schedl, "Enhanced Beat Tracking with Context-Aware
+  Neural Networks", Proc. of the 14th International Conference on Digital Audio
+  Effects (DAFx), 2011.
+
+  Sebastian Böck, Filip Korzeniowski, Jan Schlüter, Florian Krebs and Gerhard
+  Widmer, "madmom: a new Python Audio and Music Signal Processing Library",
+  Proc. of the 24th ACM International Conference on Multimedia, 2016.

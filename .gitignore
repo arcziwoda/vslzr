@@ -35,5 +35,5 @@ CLAUDE.md
 !*.spec
 
 # Local audio for benchmarks (not distributed)
-audio/
+/audio/
 .venv-gt
