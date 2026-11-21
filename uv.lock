@@ -336,16 +336,16 @@ wheels = [
 
 [[package]]
 name = "hue-entertainment-pykit"
-version = "0.9.4"
+version = "0.9.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-mbedtls" },
     { name = "requests" },
     { name = "zeroconf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/70/19/0014ae39fe19bfd308142f77a450216848fc933059e213267b503acb46f6/hue_entertainment_pykit-0.9.4.tar.gz", hash = "sha256:6bd495235d91c78d7e3cf01a1f12f173a877ae41092beb342c1a0aee36e96cd6", size = 33968, upload-time = "2025-12-15T02:13:34.178Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/4e/88a847257d1da8a38473838fb590905c4bf1a543b505387554e4bdebf696/hue_entertainment_pykit-0.9.5.tar.gz", hash = "sha256:01de17fe65e021f98aa7fcdf592fbb206e8481e7d74af2643e88068317027897", size = 177177, upload-time = "2026-10-26T23:13:34.878Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/e6/fb807bec5aa20e8c3274ff9a1df79e87c88202b8e4fff8d648685927ea2e/hue_entertainment_pykit-0.9.4-py3-none-any.whl", hash = "sha256:6149090c3bc9fb03e6ce21998bd6910155b875231ab8c8b8f0e6ef56bcdec08b", size = 38229, upload-time = "2025-12-15T02:13:32.894Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/55/54e557da0755009e37805d68491736e8587ee0614472fb046f342db7e763/hue_entertainment_pykit-0.9.5-py3-none-any.whl", hash = "sha256:2d0ade3d3c35804f1afb896bedc5bf354c96c2d7cdeabffcc72b632b278ead77", size = 38243, upload-time = "2026-10-26T23:13:33.769Z" },
 ]
 
 [[package]]
@@ -1314,7 +1314,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.135.1" },
-    { name = "hue-entertainment-pykit", specifier = ">=0.9.3" },
+    { name = "hue-entertainment-pykit", specifier = ">=0.9.5" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "pillow", marker = "sys_platform != 'linux'", specifier = ">=10.0" },
